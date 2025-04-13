@@ -1,0 +1,74 @@
+# pyssion/k8s_client.py
+from kubernetes import client, config
+
+class KubernetesJobLauncher:
+    def __init__(self, image, job_name, namespace, minio_env, entrypoint_file):
+        self.image = image
+        self.job_name = job_name
+        self.namespace = namespace
+        self.minio_env = minio_env
+        self.entrypoint_file = entrypoint_file
+
+    def launch(self):
+        config.load_kube_config()
+        from kubernetes.client import Configuration
+        c = Configuration.get_default_copy()
+        c.verify_ssl = False
+        Configuration.set_default(c)
+
+        batch_v1 = client.BatchV1Api()
+        env_list = [client.V1EnvVar(name=k, value=v) for k, v in self.minio_env.items()]
+
+        command_script = f'''
+        pip install minio && \
+        python -c """
+import os, subprocess
+from pathlib import Path
+from minio import Minio
+
+client = Minio(
+    '{self.minio_env['MINIO_ENDPOINT']}',
+    '{self.minio_env['MINIO_ACCESS']}',
+    '{self.minio_env['MINIO_SECRET']}',
+    secure=False
+)
+
+objs = client.list_objects(
+    '{self.minio_env['MINIO_BUCKET']}',
+    prefix='{self.minio_env['MINIO_PREFIX']}',
+    recursive=True
+)
+
+Path('/app/code').mkdir(parents=True, exist_ok=True)
+
+for obj in objs:
+    rel = obj.object_name.replace('{self.minio_env['MINIO_PREFIX']}/', '')
+    dst = os.path.join('/app/code', rel)
+    Path(os.path.dirname(dst)).mkdir(parents=True, exist_ok=True)
+    client.fget_object('{self.minio_env['MINIO_BUCKET']}', obj.object_name, dst)
+
+subprocess.run(['python3', '/app/code/{self.entrypoint_file}'], check=True)
+"""
+        '''.strip()
+
+        container = client.V1Container(
+            name="runner",
+            image=self.image,
+            command=["sh", "-c"],
+            args=[command_script],
+            env=env_list
+        )
+
+        template = client.V1PodTemplateSpec(
+            metadata=client.V1ObjectMeta(labels={"job-name": self.job_name}),
+            spec=client.V1PodSpec(restart_policy="Never", containers=[container])
+        )
+
+        job_spec = client.V1JobSpec(template=template, backoff_limit=0)
+        job = client.V1Job(
+            metadata=client.V1ObjectMeta(name=self.job_name),
+            spec=job_spec
+        )
+
+        batch_v1.create_namespaced_job(namespace=self.namespace, body=job)
+        print(f"🚀 쿠버네티스 Job 실행됨: {self.job_name}")

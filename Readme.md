@@ -1,0 +1,49 @@
+# Pyssion
+
+`Pyssion.run()`
+
+1. **Pack your code!**
+2. **Shoot your code into kubernetes server & run your code! **
+
+## main function
+
+- **Easy Run**: only one method, `Pyssion.run()`
+- **Automatic Container run**: Isolate each work
+- **Run Server**: If you want to run your code, you can run Kubernetes Server or Your local! *If you want to run local, please install test_env.
+
+## install
+
+```bash
+#git pull address
+pip install -e .
+```
+
+## how to use
+
+```python
+#test_code.py
+from pyssion.core import Pyssion
+
+if __name__ == "__main__":
+    p = Pyssion(
+        minio_config={
+            "endpoint": "172.20.1.17:9000",  # MinIO or S3
+            "access_key": "minio",
+            "secret_key": "minio123",
+            "bucket": "fussion"
+        },
+        k8s_config={
+            "namespace": "default",
+            "job_name": "fussion-job-test"
+        }
+    )
+    p.run()
+    
+    print("test done.")
+
+```
+
+## requirement
+
+- Python 3.11 or latest
+- rancher / minio (or S3)
