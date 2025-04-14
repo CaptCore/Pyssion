@@ -30,11 +30,11 @@ if __name__ == "__main__":
             "endpoint": "172.20.1.17:9000",  # MinIO or S3
             "access_key": "minio",
             "secret_key": "minio123",
-            "bucket": "fussion"
+            "bucket": "pyssion"
         },
         k8s_config={
             "namespace": "default",
-            "job_name": "fussion-job-test"
+            "job_name": "pyssion-job-test"
         }
     )
     p.run()
