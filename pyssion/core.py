@@ -9,16 +9,19 @@ from pyssion.k8s_client import KubernetesJobLauncher
 from pyssion.util import generate_random_string
 
 class Pyssion:
-    def __init__(self, minio_config, k8s_config):
+    def __init__(self, minio_config, k8s_config,entrypoint_file=None):
         self.minio_config = minio_config
         self.k8s_config = k8s_config
+        self.entrypoint_file = entrypoint_file if entrypoint_file is not None else None
 
     def run(self):
+        #get caller's path for draft all files
         caller_file = inspect.stack()[-1].filename
         caller_path = Path(caller_file).resolve()
         project_dir = caller_path.parent.resolve().as_posix()
-        entrypoint_file = caller_path.name
-
+        #check entry_point
+        
+        entrypoint_file = self.entrypoint_file if self.entrypoint_file is not None else caller_path.name
         unique_id = str(uuid.uuid4())[:8]
 
         modified_path = self._comment_out_pyssion_block(caller_path)
@@ -27,20 +30,13 @@ class Pyssion:
         uploader.upload_directory(project_dir, prefix=unique_id)
         uploader.upload_file(modified_path, prefix=unique_id, object_name=f"{unique_id}/{entrypoint_file}")
 
-        if "image" in self.k8s_config:
-            image = self.k8s_config["image"]
-        else:
-             image = None
-        if "job_name" in self.k8s_config:
-            job_name = self.k8s_config["job_name"]
-        else:
-            job_name = f"pyssion-job-{generate_random_string()}"
+        image,namespace,job_name,config_file = self._decode_k8s_config()
 
         job_launcher = KubernetesJobLauncher(
             image=image,
             job_name=job_name,
-            namespace=self.k8s_config["namespace"],
-            config_file=self.k8s_config["config_file"],
+            namespace=namespace,
+            config_file=config_file,
             entrypoint_file=entrypoint_file,
             minio_env={
                 "MINIO_ENDPOINT": self.minio_config["endpoint"],
@@ -80,3 +76,23 @@ class Pyssion:
         temp_file.close()
 
         return Path(temp_file.name)
+
+    def _decode_k8s_config(self):
+        if "image" in self.k8s_config:
+            image = self.k8s_config["image"]
+        else:
+             image = "python"
+        if "namespace" in self.k8s_config:
+            namespace = self.k8s_config["namespace"]
+        else:
+            namespace = "default"
+        if "job_name" in self.k8s_config:
+            job_name = self.k8s_config["job_name"]
+        else:
+            job_name = f"pyssion-job-{generate_random_string()}"
+        if  "config_file" in self.k8s_config:
+            config_file = self.k8s_config["config_file"]
+        else:
+            config_file = None
+        
+        return image,namespace,job_name,config_file
