@@ -15,6 +15,7 @@ class Pyssion:
         self.entrypoint_file = entrypoint_file if entrypoint_file is not None else None
 
     def run(self):
+        print("✅ pyssion Fission!")
         #get caller's path for draft all files
         caller_file = inspect.stack()[-1].filename
         caller_path = Path(caller_file).resolve()
@@ -28,7 +29,7 @@ class Pyssion:
 
         uploader = MinioUploader(**self.minio_config)
         uploader.upload_directory(project_dir, prefix=unique_id)
-        uploader.upload_file(modified_path, prefix=unique_id, object_name=f"{unique_id}/{entrypoint_file}")
+        uploader.upload_file(modified_path, prefix=unique_id, object_name=f"{unique_id}/{caller_path.name}")
 
         image,namespace,job_name,config_file = self._decode_k8s_config()
 
@@ -48,7 +49,6 @@ class Pyssion:
             }
         )
         job_launcher.launch()
-        print("✅ pyssion 작업이 시작되었습니다.")
 
     def _comment_out_pyssion_block(self, filepath: Path) -> Path:
         with open(filepath, "r") as f:

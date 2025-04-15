@@ -1,16 +1,35 @@
 # pyssion/k8s_client.py
-from kubernetes import client, config
+from kubernetes import client, config, watch
 from kubernetes.client import Configuration
+import time
+
+def wait_for_job_completion(namespace, job_name):
+    batch = client.BatchV1Api()
+    while True:
+        job = batch.read_namespaced_job_status(job_name, namespace)
+        status = job.status
+        if status.succeeded:
+            print("✅ Job succeeded.")
+            return "Complete"
+        elif status.failed:
+            print("❌ Job failed.")
+            return "Failed"
+        time.sleep(1)
+
+def print_job_logs(namespace, job_name):
+    core = client.CoreV1Api()
+    pod_list = core.list_namespaced_pod(namespace, label_selector=f"job-name={job_name}")
+    pod_name = pod_list.items[0].metadata.name
+    logs = core.read_namespaced_pod_log(pod_name, namespace)
+    print(f"\n📦 print log (Pod: {pod_name}):\n{'-' * 30}\n{logs}\n{'-' * 30}")
 
 class KubernetesJobLauncher:
     def __init__(self, image, job_name, namespace, minio_env, entrypoint_file, config_file=None):
-        print(f"entrypoint_file : {entrypoint_file}")
         self.image = image
         self.job_name = job_name
         self.namespace = namespace
         self.minio_env = minio_env
         self.entrypoint_file = entrypoint_file
-        print(f"entrypoint_file : {self.entrypoint_file}")
         self.config_file = config_file if config_file is not None else None
 
     def launch(self):
@@ -78,4 +97,7 @@ subprocess.run(['python3', '/app/code/{self.entrypoint_file}'], check=True)
         )
 
         batch_v1.create_namespaced_job(namespace=self.namespace, body=job)
-        print(f"🚀 쿠버네티스 Job 실행됨: {self.job_name}")
+        print(f"🚀 kubernetes Job launch: {self.job_name}")
+        status = wait_for_job_completion(self.namespace, self.job_name)
+        print(f"Job's status : {status}")
+        print_job_logs(self.namespace, self.job_name)

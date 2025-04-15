@@ -4,6 +4,7 @@ __pycache__/
 *.yaml
 *$py.class
 tmp.py
+tmp*.py
 tmp.*
 # Ignore egg-info directories
 *.egg-info/
