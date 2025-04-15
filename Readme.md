@@ -25,6 +25,7 @@ pip install -e .
 from pyssion.core import Pyssion
 
 if __name__ == "__main__":
+    #this is just test_env's setting
     p = Pyssion(
         minio_config={
             "endpoint": "172.20.1.17:9000",  # MinIO or S3
@@ -33,8 +34,7 @@ if __name__ == "__main__":
             "bucket": "pyssion"
         },
         k8s_config={
-            "namespace": "default",
-            "job_name": "pyssion-job-test"
+            config_file="your_k8s_config.yaml"
         }
     )
     p.run()
