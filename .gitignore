@@ -1,6 +1,7 @@
 # Ignore Python cache files
 __pycache__/
 *.py[cod]
+*.yaml
 *$py.class
 tmp.py
 tmp.*

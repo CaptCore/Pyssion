@@ -12,7 +12,7 @@ services:
     environment:
       CATTLE_BOOTSTRAP_PASSWORD: "rancher1234"
     volumes:
-      - ./registries.yaml:/etc/rancher/k3s/registries.yaml
+      - ./registries.yml:/etc/rancher/k3s/registries.yml
 
   registry:
     image: registry:2

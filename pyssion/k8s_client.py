@@ -1,17 +1,22 @@
 # pyssion/k8s_client.py
 from kubernetes import client, config
+from kubernetes.client import Configuration
 
 class KubernetesJobLauncher:
-    def __init__(self, image, job_name, namespace, minio_env, entrypoint_file):
+    def __init__(self, image, job_name, namespace, minio_env, entrypoint_file, config_file=None):
         self.image = image
         self.job_name = job_name
         self.namespace = namespace
         self.minio_env = minio_env
         self.entrypoint_file = entrypoint_file
+        self.config_file = config_file if config_file is not None else None
 
     def launch(self):
-        config.load_kube_config()
-        from kubernetes.client import Configuration
+        if self.config_file == None:
+            config.load_kube_config()
+        else:
+            config.load_kube_config(config_file=self.config_file)
+        
         c = Configuration.get_default_copy()
         c.verify_ssl = False
         Configuration.set_default(c)

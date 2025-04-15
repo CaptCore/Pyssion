@@ -6,15 +6,12 @@ import tempfile
 from pathlib import Path
 from pyssion.minio_client import MinioUploader
 from pyssion.k8s_client import KubernetesJobLauncher
+from pyssion.util import generate_random_string
 
 class Pyssion:
-    def __init__(self, minio_config, k8s_config, image_target=None):
+    def __init__(self, minio_config, k8s_config):
         self.minio_config = minio_config
         self.k8s_config = k8s_config
-        if image_target == None:
-            self.image_target = "python:3.11-slim"
-        else:
-            self.image_target = image_target
 
     def run(self):
         caller_file = inspect.stack()[-1].filename
@@ -30,10 +27,20 @@ class Pyssion:
         uploader.upload_directory(project_dir, prefix=unique_id)
         uploader.upload_file(modified_path, prefix=unique_id, object_name=f"{unique_id}/{entrypoint_file}")
 
+        if "image" in self.k8s_config:
+            image = self.k8s_config["image"]
+        else:
+             image = None
+        if "job_name" in self.k8s_config:
+            job_name = self.k8s_config["job_name"]
+        else:
+            job_name = f"pyssion-job-{generate_random_string()}"
+
         job_launcher = KubernetesJobLauncher(
-            image=self.image_target,
-            job_name=self.k8s_config["job_name"],
+            image=image,
+            job_name=job_name,
             namespace=self.k8s_config["namespace"],
+            config_file=self.k8s_config["config_file"],
             entrypoint_file=entrypoint_file,
             minio_env={
                 "MINIO_ENDPOINT": self.minio_config["endpoint"],
