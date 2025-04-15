@@ -7,3 +7,4 @@ tmp.py
 tmp.*
 # Ignore egg-info directories
 *.egg-info/
+.pyssionignore
