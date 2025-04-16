@@ -39,7 +39,7 @@ if __name__ == "__main__":
         gpus=1,
         req_file="req.txt"
     )
-    p.run()
+    p.run(ignore=True)
     
     print("test done.")
 
