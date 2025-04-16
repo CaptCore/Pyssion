@@ -138,5 +138,6 @@ python3 /app/code/{self.entrypoint_file}
         batch_v1.create_namespaced_job(namespace=self.namespace, body=job)
         print(f"🚀 kubernetes Job launch: {self.job_name}")
         status = wait_for_job_completion(self.namespace, self.job_name)
-        print(f"Job's status : {status}")
+        
         print_job_logs(self.namespace, self.job_name)
+        print(f"Job's status : {status}")

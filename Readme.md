@@ -36,7 +36,8 @@ if __name__ == "__main__":
         k8s_config={
             config_file="your_k8s_config.yaml"
         },
-        gpus=1
+        gpus=1,
+        req_file="req.txt"
     )
     p.run()
     
