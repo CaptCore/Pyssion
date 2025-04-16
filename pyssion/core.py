@@ -10,13 +10,15 @@ from pyssion.util import generate_random_string
 from kubernetes import client
 
 class Pyssion:
-    def __init__(self, minio_config, k8s_config, entrypoint_file=None, gpus=None):
+    def __init__(self, minio_config, k8s_config, entrypoint_file=None,req_file=None, gpus=None):
         self.minio_config = minio_config
         self.k8s_config = k8s_config
         self.entrypoint_file = entrypoint_file if entrypoint_file is not None else None
         if gpus != None:
             #if gpus on, self.k8s_config will be changed
             self._instance_check(gpus)
+        self.req_file = req_file if req_file is not None else None
+
 
     def run(self):
         print("✅ pyssion Fission!")
@@ -44,6 +46,7 @@ class Pyssion:
             config_file=config_file,
             entrypoint_file=entrypoint_file,
             resource=resource,
+            req_file=self.req_file,
             minio_env={
                 "MINIO_ENDPOINT": self.minio_config["endpoint"],
                 "MINIO_BUCKET": self.minio_config["bucket"],

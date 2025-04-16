@@ -24,7 +24,7 @@ def print_job_logs(namespace, job_name):
     print(f"\n📦 print log (Pod: {pod_name}):\n{'-' * 30}\n{logs}\n{'-' * 30}")
 
 class KubernetesJobLauncher:
-    def __init__(self, image, job_name, namespace, minio_env, resource, entrypoint_file, config_file=None):
+    def __init__(self, image, job_name, namespace, minio_env, resource, entrypoint_file, req_file=None, config_file=None):
         self.image = image
         self.job_name = job_name
         self.namespace = namespace
@@ -32,6 +32,7 @@ class KubernetesJobLauncher:
         self.entrypoint_file = entrypoint_file
         self.config_file = config_file if config_file is not None else None
         self.resource = resource
+        self.req_file = f"/app/code/{req_file}" if req_file is not None else None
 
     def launch(self):
         if self.config_file == None:
@@ -46,7 +47,9 @@ class KubernetesJobLauncher:
         batch_v1 = client.BatchV1Api()
         env_list = [client.V1EnvVar(name=k, value=v) for k, v in self.minio_env.items()]
 
-        command_script = f'''
+        if self.req_file == None:
+
+            command_script = f'''
         pip install minio && \
         python -c """
 import os, subprocess
@@ -77,6 +80,40 @@ for obj in objs:
 subprocess.run(['python3', '/app/code/{self.entrypoint_file}'], check=True)
 """
         '''.strip()
+            
+        else:
+            command_script = f'''
+        pip install minio && \
+        python -c """
+import os, subprocess
+from pathlib import Path
+from minio import Minio
+
+client = Minio(
+    '{self.minio_env['MINIO_ENDPOINT']}',
+    '{self.minio_env['MINIO_ACCESS']}',
+    '{self.minio_env['MINIO_SECRET']}',
+    secure=False
+)
+
+objs = client.list_objects(
+    '{self.minio_env['MINIO_BUCKET']}',
+    prefix='{self.minio_env['MINIO_PREFIX']}',
+    recursive=True
+)
+
+Path('/app/code').mkdir(parents=True, exist_ok=True)
+
+for obj in objs:
+    rel = obj.object_name.replace('{self.minio_env['MINIO_PREFIX']}/', '')
+    dst = os.path.join('/app/code', rel)
+    Path(os.path.dirname(dst)).mkdir(parents=True, exist_ok=True)
+    client.fget_object('{self.minio_env['MINIO_BUCKET']}', obj.object_name, dst)
+""" && \
+pip install -r {self.req_file} && \
+python3 /app/code/{self.entrypoint_file}
+        '''.strip()
+
 
         container = client.V1Container(
             name="runner",
