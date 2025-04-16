@@ -28,14 +28,15 @@ if __name__ == "__main__":
     #this is just test_env's setting
     p = Pyssion(
         minio_config={
-            "endpoint": "172.20.1.17:9000",  # MinIO or S3
+            "endpoint": "localhost:9000",  # MinIO or S3
             "access_key": "minio",
             "secret_key": "minio123",
             "bucket": "pyssion"
         },
         k8s_config={
             config_file="your_k8s_config.yaml"
-        }
+        },
+        gpus=1
     )
     p.run()
     
