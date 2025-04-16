@@ -20,7 +20,7 @@ class Pyssion:
         self.req_file = req_file if req_file is not None else None
 
 
-    def run(self):
+    def run(self,ignore=None):
         print("✅ pyssion Fission!")
         #get caller's path for draft all files
         caller_file = inspect.stack()[-1].filename
@@ -56,7 +56,7 @@ class Pyssion:
                 "ENTRYPOINT_FILE": entrypoint_file
             }
         )
-        job_launcher.launch()
+        job_launcher.launch(ignore)
 
     def _comment_out_pyssion_block(self, filepath: Path) -> Path:
         with open(filepath, "r") as f:

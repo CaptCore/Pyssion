@@ -1,19 +1,28 @@
 # pyssion/k8s_client.py
 from kubernetes import client, config, watch
 from kubernetes.client import Configuration
+from pyssion.script_builder import generate_command_script
 import time
 
-def wait_for_job_completion(namespace, job_name):
+def wait_for_job_completion(namespace, job_name,ignore=None):
+    if ignore != None:
+        from urllib3.exceptions import InsecureRequestWarning
+        from urllib3 import disable_warnings
+        disable_warnings(InsecureRequestWarning)
     batch = client.BatchV1Api()
+    counter = 0
     while True:
+        counter += 1
         job = batch.read_namespaced_job_status(job_name, namespace)
         status = job.status
         if status.succeeded:
             print("✅ Job succeeded.")
-            return "Complete"
+            return True
         elif status.failed:
             print("❌ Job failed.")
-            return "Failed"
+            return False
+        else:
+            print(f"🕐 Still Run. {counter} second(s) have passed.")
         time.sleep(1)
 
 def print_job_logs(namespace, job_name):
@@ -34,7 +43,7 @@ class KubernetesJobLauncher:
         self.resource = resource
         self.req_file = f"/app/code/{req_file}" if req_file is not None else None
 
-    def launch(self):
+    def launch(self,ignore):
         if self.config_file == None:
             config.load_kube_config()
         else:
@@ -46,74 +55,7 @@ class KubernetesJobLauncher:
 
         batch_v1 = client.BatchV1Api()
         env_list = [client.V1EnvVar(name=k, value=v) for k, v in self.minio_env.items()]
-
-        if self.req_file == None:
-
-            command_script = f'''
-        pip install minio && \
-        python -c """
-import os, subprocess
-from pathlib import Path
-from minio import Minio
-
-client = Minio(
-    '{self.minio_env['MINIO_ENDPOINT']}',
-    '{self.minio_env['MINIO_ACCESS']}',
-    '{self.minio_env['MINIO_SECRET']}',
-    secure=False
-)
-
-objs = client.list_objects(
-    '{self.minio_env['MINIO_BUCKET']}',
-    prefix='{self.minio_env['MINIO_PREFIX']}',
-    recursive=True
-)
-
-Path('/app/code').mkdir(parents=True, exist_ok=True)
-
-for obj in objs:
-    rel = obj.object_name.replace('{self.minio_env['MINIO_PREFIX']}/', '')
-    dst = os.path.join('/app/code', rel)
-    Path(os.path.dirname(dst)).mkdir(parents=True, exist_ok=True)
-    client.fget_object('{self.minio_env['MINIO_BUCKET']}', obj.object_name, dst)
-
-subprocess.run(['python3', '/app/code/{self.entrypoint_file}'], check=True)
-"""
-        '''.strip()
-            
-        else:
-            command_script = f'''
-        pip install minio && \
-        python -c """
-import os, subprocess
-from pathlib import Path
-from minio import Minio
-
-client = Minio(
-    '{self.minio_env['MINIO_ENDPOINT']}',
-    '{self.minio_env['MINIO_ACCESS']}',
-    '{self.minio_env['MINIO_SECRET']}',
-    secure=False
-)
-
-objs = client.list_objects(
-    '{self.minio_env['MINIO_BUCKET']}',
-    prefix='{self.minio_env['MINIO_PREFIX']}',
-    recursive=True
-)
-
-Path('/app/code').mkdir(parents=True, exist_ok=True)
-
-for obj in objs:
-    rel = obj.object_name.replace('{self.minio_env['MINIO_PREFIX']}/', '')
-    dst = os.path.join('/app/code', rel)
-    Path(os.path.dirname(dst)).mkdir(parents=True, exist_ok=True)
-    client.fget_object('{self.minio_env['MINIO_BUCKET']}', obj.object_name, dst)
-""" && \
-pip install -r {self.req_file} && \
-python3 /app/code/{self.entrypoint_file}
-        '''.strip()
-
+        command_script = generate_command_script( self.minio_env, entrypoint_file=self.entrypoint_file, req_file=self.req_file )
 
         container = client.V1Container(
             name="runner",
@@ -137,7 +79,7 @@ python3 /app/code/{self.entrypoint_file}
 
         batch_v1.create_namespaced_job(namespace=self.namespace, body=job)
         print(f"🚀 kubernetes Job launch: {self.job_name}")
-        status = wait_for_job_completion(self.namespace, self.job_name)
+        status = wait_for_job_completion(self.namespace, self.job_name, ignore)
         
         print_job_logs(self.namespace, self.job_name)
         print(f"Job's status : {status}")
