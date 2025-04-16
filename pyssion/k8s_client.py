@@ -24,13 +24,14 @@ def print_job_logs(namespace, job_name):
     print(f"\n📦 print log (Pod: {pod_name}):\n{'-' * 30}\n{logs}\n{'-' * 30}")
 
 class KubernetesJobLauncher:
-    def __init__(self, image, job_name, namespace, minio_env, entrypoint_file, config_file=None):
+    def __init__(self, image, job_name, namespace, minio_env, resource, entrypoint_file, config_file=None):
         self.image = image
         self.job_name = job_name
         self.namespace = namespace
         self.minio_env = minio_env
         self.entrypoint_file = entrypoint_file
         self.config_file = config_file if config_file is not None else None
+        self.resource = resource
 
     def launch(self):
         if self.config_file == None:
@@ -82,7 +83,8 @@ subprocess.run(['python3', '/app/code/{self.entrypoint_file}'], check=True)
             image=self.image,
             command=["sh", "-c"],
             args=[command_script],
-            env=env_list
+            env=env_list,
+            resources=self.resource
         )
 
         template = client.V1PodTemplateSpec(

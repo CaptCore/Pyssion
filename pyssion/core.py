@@ -7,12 +7,16 @@ from pathlib import Path
 from pyssion.minio_client import MinioUploader
 from pyssion.k8s_client import KubernetesJobLauncher
 from pyssion.util import generate_random_string
+from kubernetes import client
 
 class Pyssion:
-    def __init__(self, minio_config, k8s_config,entrypoint_file=None):
+    def __init__(self, minio_config, k8s_config, entrypoint_file=None, gpus=None):
         self.minio_config = minio_config
         self.k8s_config = k8s_config
         self.entrypoint_file = entrypoint_file if entrypoint_file is not None else None
+        if gpus != None:
+            #if gpus on, self.k8s_config will be changed
+            self._instance_check(gpus)
 
     def run(self):
         print("✅ pyssion Fission!")
@@ -31,7 +35,7 @@ class Pyssion:
         uploader.upload_directory(project_dir, prefix=unique_id)
         uploader.upload_file(modified_path, prefix=unique_id, object_name=f"{unique_id}/{caller_path.name}")
 
-        image,namespace,job_name,config_file = self._decode_k8s_config()
+        image,namespace,job_name,config_file,resource = self._decode_k8s_config()
 
         job_launcher = KubernetesJobLauncher(
             image=image,
@@ -39,6 +43,7 @@ class Pyssion:
             namespace=namespace,
             config_file=config_file,
             entrypoint_file=entrypoint_file,
+            resource=resource,
             minio_env={
                 "MINIO_ENDPOINT": self.minio_config["endpoint"],
                 "MINIO_BUCKET": self.minio_config["bucket"],
@@ -94,5 +99,17 @@ class Pyssion:
             config_file = self.k8s_config["config_file"]
         else:
             config_file = None
+        if "resources" in self.k8s_config:
+            resource = client.V1ResourceRequirements(**self.k8s_config["resources"])
+        else:
+            resource = None
         
-        return image,namespace,job_name,config_file
+        return image,namespace,job_name,config_file,resource
+    
+    def _instance_check(self,gpus):
+        if gpus is not None:
+            if "resources" not in self.k8s_config:
+                self.k8s_config["resources"] = {"requests": {}, "limits": {}}
+
+            self.k8s_config["resources"]["requests"]["nvidia.com/gpu"] = str(gpus)
+            self.k8s_config["resources"]["limits"]["nvidia.com/gpu"] = str(gpus)
