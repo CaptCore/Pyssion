@@ -7,10 +7,12 @@ from pyssion.saver.minio_client import MinioUploader
 from pyssion.runner.k8s_client import KubernetesJobLauncher
 from pyssion.core_util.util import generate_random_string
 from pyssion.handler.error_handler import error_wrapper
+from pyssion.handler.handler_main import origin_pyssion
 from kubernetes import client
 
-class Pyssion:
+class Pyssion(origin_pyssion):
     def __init__(self, minio_config, k8s_config, entrypoint_file=None,req_file=None, gpus=None):
+        self.name = "Pyssion Core"
         self.minio_config = minio_config
         self.k8s_config = k8s_config
         self.entrypoint_file = entrypoint_file if entrypoint_file is not None else None
@@ -18,6 +20,7 @@ class Pyssion:
             #if gpus on, self.k8s_config will be changed
             self._instance_check(gpus)
         self.req_file = req_file if req_file is not None else None
+        
 
     @error_wrapper
     def run(self,ignore=None):

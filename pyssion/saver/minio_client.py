@@ -1,9 +1,11 @@
 from minio import Minio
 from pyssion.saver.pyssion_ignore import minio_uploader
 from pyssion.handler.error_handler import error_wrapper
+from pyssion.handler.handler_main import origin_pyssion
 
-class MinioUploader:
+class MinioUploader(origin_pyssion):
     def __init__(self, endpoint, access_key, secret_key, bucket):
+        self.name = "Pyssion Minio Uploader"
         self.bucket = bucket
         self.client = Minio(endpoint, access_key, secret_key, secure=False)
         if not self.client.bucket_exists(bucket):

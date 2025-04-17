@@ -3,10 +3,12 @@ from kubernetes import client, config
 from kubernetes.client import Configuration
 from pyssion.runner.k8s_container import pyssion_container, timer, logviewer
 from pyssion.handler.error_handler import error_wrapper
+from pyssion.handler.handler_main import origin_pyssion
 
 #main K8s Job Builder
-class KubernetesJobLauncher:
+class KubernetesJobLauncher(origin_pyssion):
     def __init__(self, image, job_name, namespace, minio_env, resource, entrypoint_file, req_file=None, config_file=None):
+        self.name = "Pyssion Kubernetes client"
         self.image = image
         self.job_name = job_name
         self.namespace = namespace
@@ -55,12 +57,5 @@ class KubernetesJobLauncher:
         print(f"🚀 kubernetes Job launch: {self.job_name}")
         status = timer(self.namespace, self.job_name, ignore)
         
-        checker = logviewer(self.namespace, self.job_name)
+        logviewer(self.namespace, self.job_name)
         print(f"Job's status : {status}")
-        if checker:
-            print(f"Pyssion's Fission '{self.job_name}' was safe!")
-        else:
-            print(f"Pyssion has some Error")
-
-    def _handle_error(self, error: Exception):
-        print(f"[{self.name} ERROR]: {error!r}")

@@ -69,10 +69,5 @@ def logviewer(namespace, job_name):
     core = client.CoreV1Api()
     pod_list = core.list_namespaced_pod(namespace, label_selector=f"job-name={job_name}")
     pod_name = pod_list.items[0].metadata.name
-    try:
-        logs = core.read_namespaced_pod_log(pod_name, namespace)
-        print(f"\n📦 print log (Pod: {pod_name}):\n{'-' * 30}\n{logs}\n{'-' * 30}")
-        return True
-    except Exception as e:
-        print(f"Error getting logs for pod {pod_name}: {e}")
-        return False
+    logs = core.read_namespaced_pod_log(pod_name, namespace)
+    print(f"\n📦 print log (Pod: {pod_name}):\n{'-' * 30}\n{logs}\n{'-' * 30}")
