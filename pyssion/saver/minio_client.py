@@ -1,8 +1,6 @@
 from minio import Minio
-import fnmatch
-import os
-from pathlib import Path
-from pyssion.pyssion_ignore import upload_directory
+from pyssion.saver.pyssion_ignore import minio_uploader
+from pyssion.handler.error_handler import error_wrapper
 
 class MinioUploader:
     def __init__(self, endpoint, access_key, secret_key, bucket):
@@ -11,10 +9,12 @@ class MinioUploader:
         if not self.client.bucket_exists(bucket):
             self.client.make_bucket(bucket)
 
-    def upload_directory(self, directory_path, prefix=""):
-        upload_directory(directory_path, self.client, self.bucket, prefix)
+    @error_wrapper
+    def upload_all(self, directory_path, prefix=""):
+        minio_uploader(directory_path, self.client, self.bucket, prefix)
 
-    def upload_file(self, filepath, prefix, object_name=None):
+    @error_wrapper
+    def upload_single(self, filepath, prefix, object_name=None):
         if object_name is None:
             object_name = f"{prefix}/{filepath.name}"
         self.client.fput_object(self.bucket, object_name, str(filepath))

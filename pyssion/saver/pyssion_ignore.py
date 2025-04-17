@@ -25,7 +25,7 @@ def should_ignore(relative_path: Path, ignore_patterns: list) -> bool:
                 return True
     return False
 
-def upload_directory(directory_path, client, bucket, prefix=""):
+def minio_uploader(directory_path, client, bucket, prefix=""):
     directory = Path(directory_path)
     
     ignore_file = directory / '.pyssionignore'

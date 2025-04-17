@@ -1,37 +1,10 @@
 # pyssion/k8s_client.py
-from kubernetes import client, config, watch
+from kubernetes import client, config
 from kubernetes.client import Configuration
-from pyssion.script_builder import generate_command_script
-import time
+from pyssion.runner.k8s_container import pyssion_container, timer, logviewer
+from pyssion.handler.error_handler import error_wrapper
 
-def wait_for_job_completion(namespace, job_name,ignore=None):
-    if ignore != None:
-        from urllib3.exceptions import InsecureRequestWarning
-        from urllib3 import disable_warnings
-        disable_warnings(InsecureRequestWarning)
-    batch = client.BatchV1Api()
-    counter = 0
-    while True:
-        counter += 1
-        job = batch.read_namespaced_job_status(job_name, namespace)
-        status = job.status
-        if status.succeeded:
-            print("✅ Job succeeded.")
-            return True
-        elif status.failed:
-            print("❌ Job failed.")
-            return False
-        else:
-            print(f"🕐 Still Run. {counter} second(s) have passed.")
-        time.sleep(1)
-
-def print_job_logs(namespace, job_name):
-    core = client.CoreV1Api()
-    pod_list = core.list_namespaced_pod(namespace, label_selector=f"job-name={job_name}")
-    pod_name = pod_list.items[0].metadata.name
-    logs = core.read_namespaced_pod_log(pod_name, namespace)
-    print(f"\n📦 print log (Pod: {pod_name}):\n{'-' * 30}\n{logs}\n{'-' * 30}")
-
+#main K8s Job Builder
 class KubernetesJobLauncher:
     def __init__(self, image, job_name, namespace, minio_env, resource, entrypoint_file, req_file=None, config_file=None):
         self.image = image
@@ -43,6 +16,7 @@ class KubernetesJobLauncher:
         self.resource = resource
         self.req_file = f"/app/code/{req_file}" if req_file is not None else None
 
+    @error_wrapper
     def launch(self,ignore):
         if self.config_file == None:
             config.load_kube_config()
@@ -55,7 +29,7 @@ class KubernetesJobLauncher:
 
         batch_v1 = client.BatchV1Api()
         env_list = [client.V1EnvVar(name=k, value=v) for k, v in self.minio_env.items()]
-        command_script = generate_command_script( self.minio_env, entrypoint_file=self.entrypoint_file, req_file=self.req_file )
+        command_script = pyssion_container( self.minio_env, entrypoint_file=self.entrypoint_file, req_file=self.req_file )
 
         container = client.V1Container(
             name="runner",
@@ -79,7 +53,14 @@ class KubernetesJobLauncher:
 
         batch_v1.create_namespaced_job(namespace=self.namespace, body=job)
         print(f"🚀 kubernetes Job launch: {self.job_name}")
-        status = wait_for_job_completion(self.namespace, self.job_name, ignore)
+        status = timer(self.namespace, self.job_name, ignore)
         
-        print_job_logs(self.namespace, self.job_name)
+        checker = logviewer(self.namespace, self.job_name)
         print(f"Job's status : {status}")
+        if checker:
+            print(f"Pyssion's Fission '{self.job_name}' was safe!")
+        else:
+            print(f"Pyssion has some Error")
+
+    def _handle_error(self, error: Exception):
+        print(f"[{self.name} ERROR]: {error!r}")

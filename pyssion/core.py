@@ -1,12 +1,12 @@
 # pyssion/core.py
-import os
 import uuid
 import inspect
 import tempfile
 from pathlib import Path
-from pyssion.minio_client import MinioUploader
-from pyssion.k8s_client import KubernetesJobLauncher
-from pyssion.util import generate_random_string
+from pyssion.saver.minio_client import MinioUploader
+from pyssion.runner.k8s_client import KubernetesJobLauncher
+from pyssion.core_util.util import generate_random_string
+from pyssion.handler.error_handler import error_wrapper
 from kubernetes import client
 
 class Pyssion:
@@ -19,7 +19,7 @@ class Pyssion:
             self._instance_check(gpus)
         self.req_file = req_file if req_file is not None else None
 
-
+    @error_wrapper
     def run(self,ignore=None):
         print("✅ pyssion Fission!")
         #get caller's path for draft all files
@@ -34,8 +34,8 @@ class Pyssion:
         modified_path = self._comment_out_pyssion_block(caller_path)
 
         uploader = MinioUploader(**self.minio_config)
-        uploader.upload_directory(project_dir, prefix=unique_id)
-        uploader.upload_file(modified_path, prefix=unique_id, object_name=f"{unique_id}/{caller_path.name}")
+        uploader.upload_all(project_dir, prefix=unique_id)
+        uploader.upload_single(modified_path, prefix=unique_id, object_name=f"{unique_id}/{caller_path.name}")
 
         image,namespace,job_name,config_file,resource = self._decode_k8s_config()
 
@@ -58,6 +58,7 @@ class Pyssion:
         )
         job_launcher.launch(ignore)
 
+    @error_wrapper
     def _comment_out_pyssion_block(self, filepath: Path) -> Path:
         with open(filepath, "r") as f:
             lines = f.readlines()
@@ -85,6 +86,7 @@ class Pyssion:
 
         return Path(temp_file.name)
 
+    @error_wrapper
     def _decode_k8s_config(self):
         if "image" in self.k8s_config:
             image = self.k8s_config["image"]
@@ -109,6 +111,7 @@ class Pyssion:
         
         return image,namespace,job_name,config_file,resource
     
+    @error_wrapper
     def _instance_check(self,gpus):
         if gpus is not None:
             if "resources" not in self.k8s_config:
