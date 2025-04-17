@@ -1,7 +1,7 @@
 import time
 from kubernetes import client
 
-def pyssion_container(minio_env, entrypoint_file, req_file=None):
+def pyssion_container(minio_env, req_file=None):
     # common command of setup minio
     COMMON_COMMAND = "pip install minio && \\\n"
 
@@ -40,7 +40,7 @@ for obj in objs:
         )
     command_script = (
         f"{command_script} \\\n"
-        f"python3 /app/code/{entrypoint_file}"
+        f"python3 /app/code/{minio_env["ENTRYPOINT_FILE"]}"
     )
     return command_script
 

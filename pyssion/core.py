@@ -23,43 +23,22 @@ class Pyssion(origin_pyssion):
         
 
     @error_wrapper
-    def run(self,ignore=None):
+    def run(self,warn_ignore=None,ssl_ignore=None):
         print("✅ pyssion Fission!")
-        #get caller's path for draft all files
-        caller_file = inspect.stack()[-1].filename
-        caller_path = Path(caller_file).resolve()
-        project_dir = caller_path.parent.resolve().as_posix()
-        #check entry_point
-        
-        entrypoint_file = self.entrypoint_file if self.entrypoint_file is not None else caller_path.name
-        unique_id = str(uuid.uuid4())[:8]
-
-        modified_path = self._comment_out_pyssion_block(caller_path)
-
-        uploader = MinioUploader(**self.minio_config)
-        uploader.upload_all(project_dir, prefix=unique_id)
-        uploader.upload_single(modified_path, prefix=unique_id, object_name=f"{unique_id}/{caller_path.name}")
-
-        image,namespace,job_name,config_file,resource = self._decode_k8s_config()
-
+        #minio work ready & launch
+        image,namespace,job_name,config_file,resource,minio_env = self._minio_work()
+        #Kubernetes work ready
         job_launcher = KubernetesJobLauncher(
             image=image,
             job_name=job_name,
             namespace=namespace,
             config_file=config_file,
-            entrypoint_file=entrypoint_file,
             resource=resource,
             req_file=self.req_file,
-            minio_env={
-                "MINIO_ENDPOINT": self.minio_config["endpoint"],
-                "MINIO_BUCKET": self.minio_config["bucket"],
-                "MINIO_ACCESS": self.minio_config["access_key"],
-                "MINIO_SECRET": self.minio_config["secret_key"],
-                "MINIO_PREFIX": unique_id,
-                "ENTRYPOINT_FILE": entrypoint_file
-            }
+            minio_env=minio_env
         )
-        job_launcher.launch(ignore)
+        #Kubernetes work launch
+        job_launcher.launch(warn_ignore,ssl_ignore)
 
     @error_wrapper
     def _comment_out_pyssion_block(self, filepath: Path) -> Path:
@@ -88,6 +67,36 @@ class Pyssion(origin_pyssion):
         temp_file.close()
 
         return Path(temp_file.name)
+    
+    @error_wrapper
+    def _minio_work(self):
+        #get caller's path for draft all files
+        caller_file = inspect.stack()[-1].filename
+        caller_path = Path(caller_file).resolve()
+        project_dir = caller_path.parent.resolve().as_posix()
+        #check entry_point
+        
+        entrypoint_file = self.entrypoint_file if self.entrypoint_file is not None else caller_path.name
+        unique_id = str(uuid.uuid4())[:8]
+
+        modified_path = self._comment_out_pyssion_block(caller_path)
+
+        uploader = MinioUploader(**self.minio_config)
+        uploader.upload_all(project_dir, prefix=unique_id)
+        uploader.upload_single(modified_path, prefix=unique_id, object_name=f"{unique_id}/{caller_path.name}")
+
+        image,namespace,job_name,config_file,resource = self._decode_k8s_config()
+
+        minio_env={
+                "MINIO_ENDPOINT": self.minio_config["endpoint"],
+                "MINIO_BUCKET": self.minio_config["bucket"],
+                "MINIO_ACCESS": self.minio_config["access_key"],
+                "MINIO_SECRET": self.minio_config["secret_key"],
+                "MINIO_PREFIX": unique_id,
+                "ENTRYPOINT_FILE": entrypoint_file
+            }
+
+        return image, namespace, job_name, config_file, resource, minio_env
 
     @error_wrapper
     def _decode_k8s_config(self):
