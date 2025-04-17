@@ -44,6 +44,7 @@ if __name__ == "__main__":
     #entrypoint_file not required, gpus, and req_file too.
     #you can ignore some files to upload by using ".pyssionignore" file, which looks like ".gitignore" file.
     p.run(warn_ignore=True,ssl_ignore=True)
+    #ssl_ignore is just for test env, not for your code env.
 
 ```
 

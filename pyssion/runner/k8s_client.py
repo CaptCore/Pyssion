@@ -18,7 +18,7 @@ class KubernetesJobLauncher(origin_pyssion):
         self.req_file = f"/app/code/{req_file}" if req_file is not None else None
 
     @error_wrapper
-    def launch(self,warn_ignore,ssl_ignore=None):
+    def launch(self,warn_ignore,ssl_ignore=False):
         #check config_file
         if self.config_file == None:
             config.load_kube_config()
