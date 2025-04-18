@@ -3,3 +3,4 @@ class origin_pyssion:
         name = "Pyssion"
     def _handle_error(self,Exception):
         print(f"[{self.name} ERROR]: {Exception!r}")
+        raise SyntaxError

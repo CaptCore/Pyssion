@@ -11,7 +11,7 @@ from pyssion.handler.handler_main import origin_pyssion
 from kubernetes import client
 
 class Pyssion(origin_pyssion):
-    def __init__(self, minio_config, k8s_config, entrypoint_file=None,req_file=None, gpus=None):
+    def __init__(self, minio_config, k8s_config, entrypoint_file=None,req_file=None, gpus=None, cache=None):
         self.name = "Pyssion Core"
         self.minio_config = minio_config
         self.k8s_config = k8s_config
@@ -20,6 +20,9 @@ class Pyssion(origin_pyssion):
             #if gpus on, self.k8s_config will be changed
             self._instance_check(gpus)
         self.req_file = req_file if req_file is not None else None
+        if cache != None:
+            print(f"cache status : {cache}")
+            self._cache_check()
         
 
     @error_wrapper
@@ -131,3 +134,10 @@ class Pyssion(origin_pyssion):
 
             self.k8s_config["resources"]["requests"]["nvidia.com/gpu"] = str(gpus)
             self.k8s_config["resources"]["limits"]["nvidia.com/gpu"] = str(gpus)
+    
+    # @error_wrapper
+    # def _cache_check(self):
+    #     caller_file = inspect.stack()[-1].filename
+    #     caller_path = Path(caller_file).resolve()
+    #     print(f"path find: {caller_path}")
+    #     raise SyntaxError

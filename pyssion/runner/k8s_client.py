@@ -1,7 +1,7 @@
 # pyssion/k8s_client.py
 from kubernetes import client, config
 from kubernetes.client import Configuration
-from pyssion.runner.k8s_container import pyssion_container, timer, logviewer
+from pyssion.runner.k8s_container import pyssion_job_container, timer, logviewer
 from pyssion.handler.error_handler import error_wrapper
 from pyssion.handler.handler_main import origin_pyssion
 
@@ -33,7 +33,7 @@ class KubernetesJobLauncher(origin_pyssion):
 
         batch_v1 = client.BatchV1Api()
         env_list = [client.V1EnvVar(name=k, value=v) for k, v in self.minio_env.items()]
-        command_script = pyssion_container( self.minio_env, req_file=self.req_file )
+        command_script = pyssion_job_container( self.minio_env, req_file=self.req_file )
 
         container = client.V1Container(
             name="runner",
