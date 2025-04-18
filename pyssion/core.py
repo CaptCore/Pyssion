@@ -135,9 +135,9 @@ class Pyssion(origin_pyssion):
             self.k8s_config["resources"]["requests"]["nvidia.com/gpu"] = str(gpus)
             self.k8s_config["resources"]["limits"]["nvidia.com/gpu"] = str(gpus)
     
-    # @error_wrapper
-    # def _cache_check(self):
-    #     caller_file = inspect.stack()[-1].filename
-    #     caller_path = Path(caller_file).resolve()
-    #     print(f"path find: {caller_path}")
-    #     raise SyntaxError
+    @error_wrapper
+    def _cache_check(self):
+        caller_file = inspect.stack()[-1].filename
+        caller_path = Path(caller_file).resolve()
+        print(f"path find: {caller_path}")
+        raise SyntaxError
