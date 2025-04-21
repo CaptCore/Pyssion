@@ -34,6 +34,7 @@ class KubernetesJobLauncher(origin_pyssion):
         :param ssl_ignore: Set True to disable SSL verification.
         """
         super().__init__()
+        self.name = "Kubernetes Job Launcher"
         self.image = image
         self.job_name = job_name
         self.namespace = namespace
@@ -66,6 +67,10 @@ class KubernetesJobLauncher(origin_pyssion):
         # Build environment variables for container
         # Generate the shell script for MinIO download + execution
         # Container spec
+        try:
+            create_configmap_from_file(self.namespace)
+        except:
+            print("Can't Create Config Map")
         container, volume = pyssion_job_container(self.minio_env,image=self.image, req_file=self.req_file)
 
         # Pod template spec
