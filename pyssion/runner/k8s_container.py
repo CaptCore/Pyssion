@@ -1,59 +1,63 @@
 import time
-from kubernetes import client,config
+from kubernetes import client, config
 from pathlib import Path
 
-def pyssion_job_container(minio_env, req_file=None):
-    # common command of setup minio
-    COMMON_COMMAND = "pip install minio && \\\n"
 
-    # common command of minio download
-    COMMON_COMMAND += f'''python -c """ 
-import os, subprocess
-from pathlib import Path
-from minio import Minio
+#Container Runner
+def pyssion_job_container(minio_env: dict, image="python:3.11-slim", req_file: str = None):
+    """
+    - minio_env: {
+    #     "MINIO_ENDPOINT": 'minio_env["MINIO_ENDPOINT"]',,
+    #     "MINIO_ACCESS": "minio_env["MINIO_ACCESS"]",
+    #     "MINIO_SECRET": "minio_env["MINIO_SECRET"]",
+    #     "MINIO_BUCKET": "minio_env["MINIO_BUCKET"]",
+    #     "MINIO_PREFIX": "minio_env["MINIO_PREFIX"]",
+    #     "ENTRYPOINT_FILE": minio_env["ENTRYPOINT_FILE"]
+    # }
+    - req_file: req_file
+    """
 
-client = Minio(
-    '{minio_env["MINIO_ENDPOINT"]}',
-    '{minio_env["MINIO_ACCESS"]}',
-    '{minio_env["MINIO_SECRET"]}',
-    secure=False
-)
+    # 1) EnvVars 설정
+    env_vars = [
+        client.V1EnvVar(name="PYSSION_MINIO_ENDPOINT", value=minio_env["MINIO_ENDPOINT"]),
+        client.V1EnvVar(name="PYSSION_MINIO_ACCESSKEY", value=minio_env["MINIO_ACCESS"]),
+        client.V1EnvVar(name="PYSSION_MINIO_SECRETKEY", value=minio_env["MINIO_SECRET"]),
+        client.V1EnvVar(name="PYSSION_MINIO_BUCKET", value=minio_env["MINIO_BUCKET"]),
+        client.V1EnvVar(name="PYSSION_MINIO_PREFIX", value=minio_env["MINIO_PREFIX"]),
+        client.V1EnvVar(name="PYSSION_ENTRYPOINT_FILE", value=minio_env["ENTRYPOINT_FILE"]),
+    ]
 
-objs = client.list_objects(
-    '{minio_env["MINIO_BUCKET"]}',
-    prefix='{minio_env["MINIO_PREFIX"]}',
-    recursive=True
-)
+    steps = [
+        "pip install minio",
+        "python3 /scripts/pyssion_default.py"
+    ]
+    if req_file:
+        steps.append(f"pip install -r {req_file}")
+    steps.append(f"python3 /app/code/{minio_env['ENTRYPOINT_FILE']}")
 
-Path('/app/code').mkdir(parents=True, exist_ok=True)
+    cmd = " && ".join(steps)
 
-for obj in objs:
-    rel = obj.object_name.replace('{minio_env["MINIO_PREFIX"]}/', '')
-    dst = os.path.join('/app/code', rel)
-    Path(os.path.dirname(dst)).mkdir(parents=True, exist_ok=True)
-    client.fget_object('{minio_env["MINIO_BUCKET"]}', obj.object_name, dst)""" && \
-'''
-
-    if req_file != None:
-        command_script = (
-            f"{COMMON_COMMAND}"
-            f"pip install -r {req_file} && "
-        )
-    command_script = (
-        f"{command_script} \\\n"
-        f"python3 /app/code/{minio_env["ENTRYPOINT_FILE"]}"
+    container = client.V1Container(
+        name="pyssion-job-runner",
+        image=image,
+        command=["sh", "-c"],
+        args=[cmd],
+        env=env_vars,
+        volume_mounts=[
+            client.V1VolumeMount(name="pyssion-cache-script", mount_path="/scripts")
+        ]
     )
-    return command_script
 
-# def pyssion_cache_container(minio_env, req_file=None):
-#     # common command of setup minio
-#     command_script = "pip install minio && \\\n"
+    volume = client.V1Volume(
+        name="pyssion-cache-script",
+        config_map=client.V1ConfigMapVolumeSource(name="pyssion-cache-script")
+    )
 
-#     # common command of minio download
-#     command_script += f'''python -c s
-# '''
-#     return command_script
+    return container, volume
 
+
+
+#Container Time check
 def timer(namespace, job_name,ignore=None):
     if ignore != None:
         from urllib3.exceptions import InsecureRequestWarning
@@ -75,98 +79,65 @@ def timer(namespace, job_name,ignore=None):
             print(f"🕐 Still Run. {counter} second(s) have passed.")
         time.sleep(1)
 
+
+#container Log View
 def logviewer(namespace, job_name):
     core = client.CoreV1Api()
     pod_list = core.list_namespaced_pod(namespace, label_selector=f"job-name={job_name}")
     pod_name = pod_list.items[0].metadata.name
-    logs = core.read_namespaced_pod_log(pod_name, namespace)
+
+    logs = core.read_namespaced_pod_log(
+    name=pod_name,
+    namespace=namespace,
+    tail_lines=None,
+    limit_bytes=None
+    )
+
     print(f"\n📦 print log (Pod: {pod_name}):\n{'-' * 30}\n{logs}\n{'-' * 30}")
 
-def use_cache(job_name):
-    volumes = [
-    # emptyDir 볼륨 정의
-    client.V1Volume(
-        name=f"{job_name}-volume",
-        empty_dir=client.V1EmptyDirVolumeSource()
-    ),
-        client.V1Volume(
-            name=f"{job_name}-volume",
-            persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(
-                claim_name="my-pvc"
-            )
-        )
-    ]
 
-    return volumes
+#for run container configmap, use this function
+def create_configmap_from_file(
+    name: str,
+    namespace: str,
+    file_path: str,
+    key: str = None,
+    config_file: str = None
+):
+    """
+    Read ConfigMap file
+    name: str ConfigMap '{name}',
+    namespace: str ConfigMap '{namespace}',
+    file_path: str ConfigMap '{file_path}',
+    key: str = None ConfigMap '{key}',
+    config_file: str = None ConfigMap '{config_file}'
+    """
 
-def launch_cache(config_file, minio_env):
-    config.load_kube_config(config_file=config_file)
-    container = client.V1Container(
-        name="cache-runner",
-        image="python:3.9",
-        command=["sh", "-c"],
-        args=["pip install minio && python3 /scripts/tmp4.py"],
-        env=[
-            client.V1EnvVar(name="PYSSION_MINIO_ENDPOINT", value=minio_env[""]),
-            client.V1EnvVar(name="PYSSION_MINIO_ACCESSKEY", value=minio_env[""]),
-            client.V1EnvVar(name="PYSSION_MINIO_SECRETKEY", value=minio_env[""]),
-            client.V1EnvVar(name="PYSSION_MINIO_BUCKET", value=minio_env[""]),
-            client.V1EnvVar(name="PYSSION_MINIO_PREFIX", value=minio_env[""]),
-        ],
-        volume_mounts=[
-            client.V1VolumeMount(
-                name="cache-script", mount_path="/scripts"
-            )
-        ],
-    )
+    # 1) Config File Load
+    if config_file == None:
+        config.load_kube_config()
+    else:
+        config.load_kube_config(config_file=config_file)
 
-    # 2) 볼륨 정의 (ConfigMap)
-    volume = client.V1Volume(
-        name="cache-script",
-        config_map=client.V1ConfigMapVolumeSource(name="pyssion-cache-script")
-    )
-
-    # 3) PodTemplate & Job Spec
-    template = client.V1PodTemplateSpec(
-        spec=client.V1PodSpec(
-            restart_policy="Never",
-            containers=[container],
-            volumes=[volume],
-        )
-    )
-    job_spec = client.V1JobSpec(template=template, backoff_limit=0)
-    job = client.V1Job(
-        metadata=client.V1ObjectMeta(name="cache-download-job"),
-        spec=job_spec
-    )
-
-    # 4) Job 생성
-    batch_v1 = client.BatchV1Api()
-    batch_v1.create_namespaced_job(namespace="default", body=job)
-    print("Job 'cache-download-job' created.")
-
-def configmap_load(name: str,namespace: str,file_path: str,key: str = None,config_file = None):
-    config.load_kube_config(config_file=config_file)  
-
-    # 3) 파일 읽기
+    # 3) Read File
     script_path = Path(file_path)
-    script_content = script_path.read_text(encoding="utf-8")
+    script_content = script_path.read_text()
     data_key = key or script_path.name
 
-    # 4) V1ConfigMap 객체 생성
+    # 4) Create V1ConfigMap Object
     cm = client.V1ConfigMap(
         metadata=client.V1ObjectMeta(name=name),
         data={data_key: script_content}
     )
 
-    # 5) API 호출로 ConfigMap 생성
+    # 5) Create ConfigMap by Request API
     v1 = client.CoreV1Api()
     try:
         v1.create_namespaced_config_map(namespace=namespace, body=cm)
         print(f"ConfigMap '{name}' created in namespace '{namespace}'.")
     except client.exceptions.ApiException as e:
         if e.status == 409:
-            # 이미 존재하면 덮어쓰기(patch) 처리
+            # Already Exist, than process patch
             v1.patch_namespaced_config_map(name=name, namespace=namespace, body=cm)
             print(f"ConfigMap '{name}' patched (already existed).")
         else:

@@ -2,16 +2,29 @@
 import uuid
 import inspect
 import tempfile
+import os
+import json
 from pathlib import Path
 from pyssion.saver.minio_client import MinioUploader
 from pyssion.runner.k8s_client import KubernetesJobLauncher
-from pyssion.core_util.util import generate_random_string
+from pyssion.core_util.path_util import generate_random_string,generate_pyssion_cache_file
 from pyssion.handler.error_handler import error_wrapper
 from pyssion.handler.handler_main import origin_pyssion
 from kubernetes import client
 
 class Pyssion(origin_pyssion):
-    def __init__(self, minio_config, k8s_config, entrypoint_file=None,req_file=None, gpus=None, cache=None):
+    def __init__(
+        self, 
+        minio_config : dict, 
+        k8s_config : dict, 
+        entrypoint_file : str = None,
+        req_file : str = None, 
+        gpus : int = None, 
+        ):
+        """
+        Pyssion's Core Class
+        For run Pyssion, You must declare this class on your code.
+        """
         self.name = "Pyssion Core"
         self.minio_config = minio_config
         self.k8s_config = k8s_config
@@ -20,17 +33,15 @@ class Pyssion(origin_pyssion):
             #if gpus on, self.k8s_config will be changed
             self._instance_check(gpus)
         self.req_file = req_file if req_file is not None else None
-        if cache != None:
-            print(f"cache status : {cache}")
-            self._cache_check()
         
 
     @error_wrapper
-    def run(self,warn_ignore=None,ssl_ignore=None):
+    def run(self, warn_ignore=None, ssl_ignore=None, cache: bool = False):
         print("✅ pyssion Fission!")
-        #minio work ready & launch
-        image,namespace,job_name,config_file,resource,minio_env = self._minio_work()
-        #Kubernetes work ready
+        # minio work ready & launch
+        image, namespace, job_name, config_file, resource, minio_env = \
+            self._minio_work(cache=cache)            # ← cache flag
+        # Kubernetes work ready
         job_launcher = KubernetesJobLauncher(
             image=image,
             job_name=job_name,
@@ -38,12 +49,13 @@ class Pyssion(origin_pyssion):
             config_file=config_file,
             resource=resource,
             req_file=self.req_file,
-            minio_env=minio_env
+            minio_env=minio_env,
+            ssl_ignore=ssl_ignore,
+            cache=cache
         )
-        #Kubernetes work launch
-        job_launcher.launch(warn_ignore,ssl_ignore)
+        # Kubernetes work launch
+        job_launcher.launch(warn_ignore)
 
-    @error_wrapper
     def _comment_out_pyssion_block(self, filepath: Path) -> Path:
         with open(filepath, "r") as f:
             lines = f.readlines()
@@ -71,37 +83,54 @@ class Pyssion(origin_pyssion):
 
         return Path(temp_file.name)
     
-    @error_wrapper
-    def _minio_work(self):
-        #get caller's path for draft all files
-        caller_file = inspect.stack()[-1].filename
-        caller_path = Path(caller_file).resolve()
-        project_dir = caller_path.parent.resolve().as_posix()
-        #check entry_point
-        
-        entrypoint_file = self.entrypoint_file if self.entrypoint_file is not None else caller_path.name
-        unique_id = str(uuid.uuid4())[:8]
+    def _minio_work(self, cache: bool = False):
+        # get caller's path for draft all files
+        caller_path = self._path_finder("caller_path")
+        project_dir = Path(self._path_finder("caller_dir"))
 
+        # Entry-point file fix
+        entrypoint_file = self.entrypoint_file or caller_path.name
+
+        # ─── prefix create / reuse ─────────────────────────────
+        cache_file = project_dir / ".pyssioncache"
+        if cache:
+            if cache_file.exists():
+                data = json.loads(cache_file.read_text(encoding="utf-8"))
+                unique_id = data.get("prefix")
+            else:
+                unique_id = str(uuid.uuid4())[:8]
+                cache_file.write_text(json.dumps({"prefix": unique_id}), encoding="utf-8")
+        else:
+            unique_id = str(uuid.uuid4())[:8]
+        # ──────────────────────────────────────────────────────────
+
+        # Pyssion block fix
         modified_path = self._comment_out_pyssion_block(caller_path)
 
+        # Upload Minio
         uploader = MinioUploader(**self.minio_config)
         uploader.upload_all(project_dir, prefix=unique_id)
-        uploader.upload_single(modified_path, prefix=unique_id, object_name=f"{unique_id}/{caller_path.name}")
+        uploader.upload_single(
+            modified_path,
+            prefix=unique_id,
+            object_name=f"{unique_id}/{caller_path.name}"
+        )
 
-        image,namespace,job_name,config_file,resource = self._decode_k8s_config()
+        #need to resolve dependency problem.
 
-        minio_env={
-                "MINIO_ENDPOINT": self.minio_config["endpoint"],
-                "MINIO_BUCKET": self.minio_config["bucket"],
-                "MINIO_ACCESS": self.minio_config["access_key"],
-                "MINIO_SECRET": self.minio_config["secret_key"],
-                "MINIO_PREFIX": unique_id,
-                "ENTRYPOINT_FILE": entrypoint_file
-            }
+        image, namespace, job_name, config_file, resource = self._decode_k8s_config()
+
+        minio_env = {
+            "MINIO_ENDPOINT": self.minio_config["endpoint"],
+            "MINIO_BUCKET":   self.minio_config["bucket"],
+            "MINIO_ACCESS":   self.minio_config["access_key"],
+            "MINIO_SECRET":   self.minio_config["secret_key"],
+            "MINIO_PREFIX":   unique_id,
+            "ENTRYPOINT_FILE": entrypoint_file
+        }
 
         return image, namespace, job_name, config_file, resource, minio_env
 
-    @error_wrapper
     def _decode_k8s_config(self):
         if "image" in self.k8s_config:
             image = self.k8s_config["image"]
@@ -126,7 +155,6 @@ class Pyssion(origin_pyssion):
         
         return image,namespace,job_name,config_file,resource
     
-    @error_wrapper
     def _instance_check(self,gpus):
         if gpus is not None:
             if "resources" not in self.k8s_config:
@@ -135,9 +163,21 @@ class Pyssion(origin_pyssion):
             self.k8s_config["resources"]["requests"]["nvidia.com/gpu"] = str(gpus)
             self.k8s_config["resources"]["limits"]["nvidia.com/gpu"] = str(gpus)
     
-    @error_wrapper
     def _cache_check(self):
+        cache_dir = os.path.join(self._path_finder("caller_dir"),"__pyssioncache__")
+        if os.path.isdir(cache_dir):
+            for root, _, files in os.walk(cache_dir):
+                for file in files:
+                    if os.path.join(root,file).endswith(".pyssioncache"):
+                        return os.path.join(root,file)
+        else:
+            return generate_pyssion_cache_file(cache_dir)
+        raise SyntaxError
+
+    def _path_finder(self,locate):
         caller_file = inspect.stack()[-1].filename
         caller_path = Path(caller_file).resolve()
-        print(f"path find: {caller_path}")
-        raise SyntaxError
+        if locate == "caller_path":
+            return caller_path
+        elif locate == "caller_dir":
+            return caller_path.parent.resolve().as_posix()

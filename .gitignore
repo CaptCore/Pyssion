@@ -8,5 +8,7 @@ tmp*.py
 tmp.*
 # Ignore egg-info directories
 *.egg-info/
+# Ignore pyssion test
 .pyssionignore
+.pyssioncache
 req.txt
