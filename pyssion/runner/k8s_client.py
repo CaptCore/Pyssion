@@ -1,10 +1,13 @@
 # pyssion/k8s_client.py
+import os
+from pathlib import Path
 from kubernetes import client, config
 from kubernetes.client import Configuration
 from kubernetes.client.rest import ApiException
-from pyssion.runner.k8s_container import pyssion_job_container, timer, logviewer, create_configmap_from_file
+from pyssion.runner.k8s_container import pyssion_job_container, timer, logviewer
 from pyssion.handler.error_handler import error_wrapper
 from pyssion.handler.handler_main import origin_pyssion
+
 
 
 class KubernetesJobLauncher(origin_pyssion):
@@ -18,7 +21,6 @@ class KubernetesJobLauncher(origin_pyssion):
         namespace: str,
         minio_env: dict,
         resource: client.V1ResourceRequirements,
-        cache: bool = False,
         req_file: str = None,
         config_file: str = None,
         ssl_ignore: bool = False
@@ -35,12 +37,12 @@ class KubernetesJobLauncher(origin_pyssion):
         """
         super().__init__()
         self.name = "Kubernetes Job Launcher"
-        self.image = image
-        self.job_name = job_name
-        self.namespace = namespace
-        self.minio_env = minio_env
-        self.resource = resource
-        self.req_file = f"/app/code/{req_file}" if req_file else None
+        self._image = image
+        self._job_name = job_name
+        self._namespace = namespace
+        self._minio_env = minio_env
+        self._resource = resource
+        self._req_file = f"/app/code/{req_file}" if req_file else None
 
         # Load Kubernetes configuration once
         if config_file:
@@ -54,9 +56,9 @@ class KubernetesJobLauncher(origin_pyssion):
         Configuration.set_default(conf)
 
         # API clients
-        self.core_v1 = client.CoreV1Api()
-        self.batch_v1 = client.BatchV1Api()
-        self.storage_v1 = client.StorageV1Api()
+        self._core_v1 = client.CoreV1Api()
+        self._batch_v1 = client.BatchV1Api()
+        self._storage_v1 = client.StorageV1Api()
 
     @error_wrapper
     def launch(self, warn_ignore: bool):
@@ -68,10 +70,10 @@ class KubernetesJobLauncher(origin_pyssion):
         # Generate the shell script for MinIO download + execution
         # Container spec
         try:
-            create_configmap_from_file(self.namespace)
+            self._create_configmap_from_file()
         except:
             print("Can't Create Config Map")
-        container, volume = pyssion_job_container(self.minio_env,image=self.image, req_file=self.req_file)
+        container, volume = pyssion_job_container(self._minio_env,image=self._image, req_file=self._req_file)
 
         # Pod template spec
         pod_spec = client.V1PodSpec(
@@ -80,7 +82,7 @@ class KubernetesJobLauncher(origin_pyssion):
             volumes=[volume]
         )
         template = client.V1PodTemplateSpec(
-            metadata=client.V1ObjectMeta(labels={"job-name": self.job_name}),
+            metadata=client.V1ObjectMeta(labels={"job-name": self._job_name}),
             spec=pod_spec
         )
 
@@ -89,68 +91,60 @@ class KubernetesJobLauncher(origin_pyssion):
         job = client.V1Job(
             api_version="batch/v1",
             kind="Job",
-            metadata=client.V1ObjectMeta(name=self.job_name),
+            metadata=client.V1ObjectMeta(name=self._job_name),
             spec=job_spec
         )
 
         # Create and monitor the Job
-        self.batch_v1.create_namespaced_job(namespace=self.namespace, body=job)
-        print(f"🚀 Kubernetes Job launched: {self.job_name}")
+        self._batch_v1.create_namespaced_job(namespace=self._namespace, body=job)
+        print(f"🚀 Kubernetes Job launched: {self._job_name}")
 
-        status = timer(self.namespace, self.job_name, warn_ignore)
-        logviewer(self.namespace, self.job_name)
+        status = timer(self._namespace, self._job_name, warn_ignore)
+        logviewer(self._namespace, self._job_name)
         print(f"Job status: {status}")
+        
+    @error_wrapper
+    def _create_configmap_from_file(self):
+        """
+        Create or update a ConfigMap containing the runner script.
+        Uses self.job_name as the ConfigMap name and self.namespace for the namespace.
+        """
+        from kubernetes.client.rest import ApiException
+        pkg_dir = Path(__file__).parent
+        script_path = pkg_dir / "runner_container" / "k8s_uploader.py"
 
-    @error_wrapper
-    def _create_pvc(
-        self,
-        name: str,
-        namespace: str = "default",
-        storage_class: str = "nfs-client",
-        access_modes: tuple = ("ReadWriteMany",),
-        size: str = "10Gi"
-    ):
-        """
-        Ensure a PersistentVolumeClaim exists, creating it if necessary.
-        """
-        if self._pvc_exists(name,namespace):
-            pvc_manifest = client.V1PersistentVolumeClaim(
-                metadata=client.V1ObjectMeta(name=name),
-                spec=client.V1PersistentVolumeClaimSpec(
-                    access_modes=list(access_modes),
-                    storage_class_name=storage_class,
-                    resources=client.V1ResourceRequirements(requests={"storage": size})
-                )
-            )
-            try:
-                self.core_v1.create_namespaced_persistent_volume_claim(
-                    namespace=namespace,
-                    body=pvc_manifest
-                )
-                print(f"✅ PVC '{name}' created in namespace '{namespace}'.")
-                return True
-            except ApiException as e:
-                if e.status == 409:
-                    print(f"ℹ️ PVC '{name}' already exists in namespace '{namespace}'.")
-                else:
-                    raise RuntimeError("Can't Get Kubernetes's Normal Response.")
-        else:
-            return True
-    
-    @error_wrapper
-    def _pvc_exists(
-    self,
-    name: str, 
-    namespace: str = "default"
-    ) -> bool:
-        """
-            find cache's persistent volume claim function
-        """
+        if not script_path.exists():
+            raise FileNotFoundError(f"ConfigMap source file not found: {script_path}")
+
+        script_content = script_path.read_text(encoding="utf-8")
+        configmap_name = self._job_name
+        namespace = self._namespace
+
+        cm_body = client.V1ConfigMap(
+            metadata=client.V1ObjectMeta(name=configmap_name, namespace=namespace),
+            data={script_path.name: script_content}
+        )
+
         try:
-            self.storage_v1.read_namespaced_persistent_volume_claim(name, namespace)
-            return True
+            # already Exist, than patch
+            self._core_v1.read_namespaced_config_map(configmap_name, namespace)
+            self._core_v1.patch_namespaced_config_map(
+                name=configmap_name,
+                namespace=namespace,
+                body=cm_body
+            )
+            print(f"🔄 Updated ConfigMap '{configmap_name}' in namespace '{namespace}'.")
         except ApiException as e:
             if e.status == 404:
-                return False
+                # Can't Find, than create
+                self._core_v1.create_namespaced_config_map(
+                    namespace=namespace,
+                    body=cm_body
+                )
+                print(f"✅ Created ConfigMap '{configmap_name}' in namespace '{namespace}'.")
             else:
-                raise RuntimeError("Can't Get Kubernetes's Normal Response.")
+                # Another Error, Raise
+                raise
+
+        return cm_body
+    

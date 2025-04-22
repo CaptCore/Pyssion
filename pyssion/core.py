@@ -36,11 +36,11 @@ class Pyssion(origin_pyssion):
         
 
     @error_wrapper
-    def run(self, warn_ignore=None, ssl_ignore=None, cache: bool = False):
+    def run(self, warn_ignore=None, ssl_ignore=None):
         print("✅ pyssion Fission!")
         # minio work ready & launch
         image, namespace, job_name, config_file, resource, minio_env = \
-            self._minio_work(cache=cache)            # ← cache flag
+            self._minio_work()            # ← cache flag
         # Kubernetes work ready
         job_launcher = KubernetesJobLauncher(
             image=image,
@@ -50,8 +50,7 @@ class Pyssion(origin_pyssion):
             resource=resource,
             req_file=self.req_file,
             minio_env=minio_env,
-            ssl_ignore=ssl_ignore,
-            cache=cache
+            ssl_ignore=ssl_ignore
         )
         # Kubernetes work launch
         job_launcher.launch(warn_ignore)
@@ -83,7 +82,7 @@ class Pyssion(origin_pyssion):
 
         return Path(temp_file.name)
     
-    def _minio_work(self, cache: bool = False):
+    def _minio_work(self):
         # get caller's path for draft all files
         caller_path = self._path_finder("caller_path")
         project_dir = Path(self._path_finder("caller_dir"))
@@ -93,15 +92,12 @@ class Pyssion(origin_pyssion):
 
         # ─── prefix create / reuse ─────────────────────────────
         cache_file = project_dir / ".pyssioncache"
-        if cache:
-            if cache_file.exists():
-                data = json.loads(cache_file.read_text(encoding="utf-8"))
-                unique_id = data.get("prefix")
-            else:
-                unique_id = str(uuid.uuid4())[:8]
-                cache_file.write_text(json.dumps({"prefix": unique_id}), encoding="utf-8")
+        if cache_file.exists():
+            data = json.loads(cache_file.read_text(encoding="utf-8"))
+            unique_id = data.get("prefix")
         else:
             unique_id = str(uuid.uuid4())[:8]
+            cache_file.write_text(json.dumps({"prefix": unique_id}), encoding="utf-8")
         # ──────────────────────────────────────────────────────────
 
         # Pyssion block fix
