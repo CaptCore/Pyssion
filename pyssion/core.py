@@ -114,7 +114,7 @@ class Pyssion(origin_pyssion):
 
         #need to resolve dependency problem.
 
-        image, namespace, job_name, config_file, resource = self._decode_k8s_config()
+        image, namespace, job_name, config_file, resource = self._decode_k8s_config(unique_id=unique_id)
 
         minio_env = {
             "MINIO_ENDPOINT": self.minio_config["endpoint"],
@@ -127,7 +127,7 @@ class Pyssion(origin_pyssion):
 
         return image, namespace, job_name, config_file, resource, minio_env
 
-    def _decode_k8s_config(self):
+    def _decode_k8s_config(self,unique_id=None):
         if "image" in self.k8s_config:
             image = self.k8s_config["image"]
         else:
@@ -139,7 +139,10 @@ class Pyssion(origin_pyssion):
         if "job_name" in self.k8s_config:
             job_name = self.k8s_config["job_name"]
         else:
-            job_name = f"pyssion-job-{generate_random_string()}"
+            if unique_id == None:
+                job_name = f"pyssion-job-{generate_random_string()}"
+            else:
+                job_name = f"pyssion-job-{unique_id}"
         if  "config_file" in self.k8s_config:
             config_file = self.k8s_config["config_file"]
         else:

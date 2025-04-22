@@ -3,8 +3,7 @@ import os
 from kubernetes import client, config
 from pathlib import Path
 from kubernetes.client.rest import ApiException
-
-
+        
 #Container Runner
 def pyssion_job_container(minio_env: dict, pyssion_configmap_name:str = None, image="python:3.11-slim", req_file: str = None):
     """
@@ -143,7 +142,7 @@ def create_configmap_from_file(
     try:
         v1.create_namespaced_config_map(namespace=namespace, body=cm)
         print(f"ConfigMap '{name}' created in namespace '{namespace}'.")
-    except client.exceptions.ApiException as e:
+    except ApiException as e:
         if e.status == 409:
             # Already Exist, than process patch
             v1.patch_namespaced_config_map(name=name, namespace=namespace, body=cm)

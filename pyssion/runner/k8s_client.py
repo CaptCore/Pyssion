@@ -66,20 +66,61 @@ class KubernetesJobLauncher(origin_pyssion):
         Create and run a Kubernetes Job, then stream its logs.
         :param warn_ignore: If True, suppress specific warnings during job wait.
         """
+        # Kubernetes pod spec list
+        volumes, volume_mounts, containers = [],[],[]
+        # PVC name 
+        pvc_name = f"{self._job_name}-data"
+        
         # Build environment variables for container
         # Generate the shell script for MinIO download + execution
         # Container spec
+
+        
+        
         try:
             self._create_configmap_from_file()
         except:
             print("Can't Create Config Map")
         container, volume = pyssion_job_container(self._minio_env,image=self._image, req_file=self._req_file)
 
+        if self._create_pvc(
+                name=pvc_name,
+                namespace=self._namespace,
+                storage_class="longhorn",
+                access_modes=("ReadWriteOnce",),
+                size="100Gi"
+            ):
+            print(f"👌 Create PVC")
+        else:
+            print(f"🚨 Can't Get PVC data")
+
+        volumes.append(
+                client.V1Volume(
+                    name="data",
+                    persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(
+                        claim_name=pvc_name
+                    )
+                )
+            )
+
+        volume_mounts.append(
+                client.V1VolumeMount(
+                    name="data",
+                    mount_path="/app/code"
+                )
+            )
+        # Update volume List
+        volumes.append(volume)
+        # Update container
+        container.volume_mounts = (container.volume_mounts or []) + volume_mounts
+        # Update container List
+        containers.append(container)
+        
         # Pod template spec
         pod_spec = client.V1PodSpec(
             restart_policy="Never",
-            containers=[container],
-            volumes=[volume]
+            containers=containers,
+            volumes=volumes
         )
         template = client.V1PodTemplateSpec(
             metadata=client.V1ObjectMeta(labels={"job-name": self._job_name}),
@@ -147,4 +188,59 @@ class KubernetesJobLauncher(origin_pyssion):
                 raise
 
         return cm_body
+    
+    @error_wrapper
+    def _create_pvc(
+        self,
+        name: str,
+        namespace: str = "default",
+        storage_class: str = "nfs-client",
+        access_modes: tuple = ("ReadWriteMany",),
+        size: str = "10Gi"
+    ):
+        """
+        Ensure a PersistentVolumeClaim exists, creating it if necessary.
+        """
+        if self._pvc_exists(name,namespace) == False:
+            pvc_manifest = client.V1PersistentVolumeClaim(
+                metadata=client.V1ObjectMeta(name=name),
+                spec=client.V1PersistentVolumeClaimSpec(
+                    access_modes=list(access_modes),
+                    storage_class_name=storage_class,
+                    resources=client.V1ResourceRequirements(requests={"storage": size})
+                )
+            )
+            try:
+                self._core_v1.create_namespaced_persistent_volume_claim(
+                    namespace=namespace,
+                    body=pvc_manifest
+                )
+                print(f"✅ PVC '{name}' created in namespace '{namespace}'.")
+                return True
+            except ApiException as e:
+                if e.status == 409:
+                    print(f"ℹ️ PVC '{name}' already exists in namespace '{namespace}'.")
+                    return False
+                else:
+                    raise RuntimeError("Can't Get Kubernetes's Normal Response.")
+        else:
+            return True
+        
+    @error_wrapper
+    def _pvc_exists(
+    self,
+    name: str, 
+    namespace: str = "default"
+    ) -> bool:
+        """
+            find cache's persistent volume claim function
+        """
+        try:
+            self._core_v1.read_namespaced_persistent_volume_claim(name, namespace)
+            return True
+        except ApiException as e:
+            if e.status == 404:
+                return False
+            else:
+                raise RuntimeError("Can't Get Kubernetes's Normal Response.")
     
