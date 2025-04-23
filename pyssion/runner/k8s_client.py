@@ -70,18 +70,14 @@ class KubernetesJobLauncher(origin_pyssion):
         volumes, volume_mounts, containers = [],[],[]
         # PVC name 
         pvc_name = f"{self._job_name}-data"
-        
         # Build environment variables for container
         # Generate the shell script for MinIO download + execution
-        # Container spec
-
-        
-        
+        # Container spec        
         try:
             self._create_configmap_from_file()
         except:
             print("Can't Create Config Map")
-        container, volume = pyssion_job_container(self._minio_env,image=self._image, req_file=self._req_file)
+        container, volume = pyssion_job_container(self._minio_env,image=self._image, req_file=self._req_file, resources=self._resource)
 
         if self._create_pvc(
                 name=pvc_name,

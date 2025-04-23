@@ -5,7 +5,7 @@ from pathlib import Path
 from kubernetes.client.rest import ApiException
         
 #Container Runner
-def pyssion_job_container(minio_env: dict, pyssion_configmap_name:str = None, image="python:3.11-slim", req_file: str = None):
+def pyssion_job_container(minio_env: dict, pyssion_configmap_name:str = None, image="python:3.11-slim", req_file: str = None, resources: client.V1ResourceRequirements = None):
     """
     - minio_env: {
     #     "MINIO_ENDPOINT": 'minio_env["MINIO_ENDPOINT"]',,
@@ -48,9 +48,11 @@ def pyssion_job_container(minio_env: dict, pyssion_configmap_name:str = None, im
         env=env_vars,
         volume_mounts=[
             client.V1VolumeMount(name=pyssion_configmap_name, mount_path="/scripts")
-        ]
+        ],
+        resources=resources,
+        working_dir="/app/code"
     )
-    container.working_dir = "/app/code"
+
     volume = client.V1Volume(
         name=pyssion_configmap_name,
         config_map=client.V1ConfigMapVolumeSource(name=pyssion_configmap_name)
