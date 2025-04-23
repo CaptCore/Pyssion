@@ -36,7 +36,7 @@ def pyssion_job_container(minio_env: dict, pyssion_configmap_name:str = None, im
     ]
     if req_file:
         steps.append(f"pip install -r {req_file}")
-    steps.append(f"python3 /app/code/{minio_env['ENTRYPOINT_FILE']}")
+    steps.append(f"python3 {minio_env['ENTRYPOINT_FILE']}")
 
     cmd = " && ".join(steps)
 
@@ -50,7 +50,7 @@ def pyssion_job_container(minio_env: dict, pyssion_configmap_name:str = None, im
             client.V1VolumeMount(name=pyssion_configmap_name, mount_path="/scripts")
         ]
     )
-
+    container.working_dir = "/app/code"
     volume = client.V1Volume(
         name=pyssion_configmap_name,
         config_map=client.V1ConfigMapVolumeSource(name=pyssion_configmap_name)
