@@ -91,7 +91,7 @@ class Pyssion(origin_pyssion):
         entrypoint_file = self.entrypoint_file or caller_path.name
 
         # ─── prefix create / reuse ─────────────────────────────
-        cache_file = project_dir / ".pyssioncache"
+        cache_file = project_dir / "pyssioncache.json"
         if cache_file.exists():
             data = json.loads(cache_file.read_text(encoding="utf-8"))
             unique_id = data.get("prefix")
