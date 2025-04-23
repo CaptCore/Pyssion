@@ -56,7 +56,7 @@ class Pyssion(origin_pyssion):
         job_launcher.launch(warn_ignore)
 
     def _comment_out_pyssion_block(self, filepath: Path) -> Path:
-        with open(filepath, "r") as f:
+        with open(filepath, "r",encoding="utf-8") as f:
             lines = f.readlines()
 
         modified_lines = []
@@ -91,7 +91,7 @@ class Pyssion(origin_pyssion):
         entrypoint_file = self.entrypoint_file or caller_path.name
 
         # ─── prefix create / reuse ─────────────────────────────
-        cache_file = project_dir / "pyssioncache.json"
+        cache_file = project_dir / ".pyssioncache"
         if cache_file.exists():
             data = json.loads(cache_file.read_text(encoding="utf-8"))
             unique_id = data.get("prefix")
