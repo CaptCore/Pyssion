@@ -10,5 +10,6 @@ tmp.*
 *.egg-info/
 # Ignore pyssion test
 .pyssionignore
+.pyssioncache
 pyssioncache.json
 req.txt
