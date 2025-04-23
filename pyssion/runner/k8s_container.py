@@ -30,13 +30,21 @@ def pyssion_job_container(minio_env: dict, pyssion_configmap_name:str = None, im
         client.V1EnvVar(name="PYSSION_ENTRYPOINT_FILE", value=minio_env["ENTRYPOINT_FILE"]),
     ]
 
+    #setup command
+    venv_block = (
+        'if [ ! -d ./venv ]; then '
+        'python3 -m venv venv && . venv/bin/activate && pip install --upgrade pip minio'
+        + (f' && pip install -r {req_file}' if req_file else '')
+        + '; '
+        'else '
+        '. venv/bin/activate; '
+        'fi'
+    )
     steps = [
-        "pip install minio",
-        "python3 /scripts/pyssion_default.py"
+        venv_block,
+        'venv/bin/python /scripts/pyssion_default.py',
+        f'venv/bin/python {minio_env["ENTRYPOINT_FILE"]}',
     ]
-    if req_file:
-        steps.append(f"pip install -r {req_file}")
-    steps.append(f"python3 {minio_env['ENTRYPOINT_FILE']}")
 
     cmd = " && ".join(steps)
 
