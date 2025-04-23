@@ -116,8 +116,13 @@ class KubernetesJobLauncher(origin_pyssion):
         pod_spec = client.V1PodSpec(
             restart_policy="Never",
             containers=containers,
-            volumes=volumes
+            volumes=volumes,
         )
+        # ToDo
+        # if self._resource != None:
+        #     pod_spec.node_selector = {
+        #     "gpu": "true" 
+        # }
         template = client.V1PodTemplateSpec(
             metadata=client.V1ObjectMeta(labels={"job-name": self._job_name}),
             spec=pod_spec
