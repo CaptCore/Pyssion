@@ -9,7 +9,6 @@ from pyssion.handler.error_handler import error_wrapper
 from pyssion.handler.handler_main import origin_pyssion
 
 
-
 class KubernetesJobLauncher(origin_pyssion):
     """
     Launch Kubernetes Jobs with optional PersistentVolumeClaim support and MinIO pre-download logic.
@@ -74,10 +73,10 @@ class KubernetesJobLauncher(origin_pyssion):
         # Generate the shell script for MinIO download + execution
         # Container spec        
         try:
-            self._create_configmap_from_file()
+            self._create_minio_configmap()
         except:
             print("Can't Create Config Map")
-        container, volume = pyssion_job_container(self._minio_env,image=self._image, req_file=self._req_file, resources=self._resource)
+        container, volume = pyssion_job_container(self._minio_env,pyssion_configmap_name=self._job_name,image=self._image, req_file=self._req_file, resources=self._resource)
 
         if self._create_pvc(
                 name=pvc_name,
@@ -89,22 +88,12 @@ class KubernetesJobLauncher(origin_pyssion):
             print(f"👌 Create PVC")
         else:
             print(f"🚨 Can't Get PVC data")
+        
+        volumes.append(client.V1Volume(name="dev-fuse",host_path=client.V1HostPathVolumeSource(path="/dev/fuse",type="CharDevice")))
+        volumes.append(client.V1Volume(name="data",persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(claim_name=pvc_name)))
 
-        volumes.append(
-                client.V1Volume(
-                    name="data",
-                    persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(
-                        claim_name=pvc_name
-                    )
-                )
-            )
-
-        volume_mounts.append(
-                client.V1VolumeMount(
-                    name="data",
-                    mount_path="/app/code"
-                )
-            )
+        volume_mounts.append(client.V1VolumeMount(name="data",mount_path="/app/code"))
+        volume_mounts.append(client.V1VolumeMount(name="dev-fuse",mount_path="/dev/fuse"))
         # Update volume List
         volumes.append(volume)
         # Update container
@@ -146,25 +135,32 @@ class KubernetesJobLauncher(origin_pyssion):
         print(f"Job status: {status}")
         
     @error_wrapper
-    def _create_configmap_from_file(self):
+    def _create_minio_configmap(self):
         """
         Create or update a ConfigMap containing the runner script.
         Uses self.job_name as the ConfigMap name and self.namespace for the namespace.
         """
-        from kubernetes.client.rest import ApiException
-        pkg_dir = Path(__file__).parent
-        script_path = pkg_dir / "runner_container" / "k8s_uploader.py"
 
-        if not script_path.exists():
-            raise FileNotFoundError(f"ConfigMap source file not found: {script_path}")
+        config_map_files = {}
+        
+        for filename in ["k8s_uploader.py","minio_adapter.sh"]:
+            pkg_dir = Path(__file__).parent
+            script_path = pkg_dir / "runner_container" / filename
 
-        script_content = script_path.read_text(encoding="utf-8")
+            script_content = script_path.read_text(encoding="utf-8")
+
+            if not script_path.exists():
+                raise FileNotFoundError(f"ConfigMap source file not found: {script_path}")
+            print(f"{script_path.name} will be uploaded.")
+            config_map_files[script_path.name] = script_content
+
+        
         configmap_name = self._job_name
         namespace = self._namespace
 
         cm_body = client.V1ConfigMap(
             metadata=client.V1ObjectMeta(name=configmap_name, namespace=namespace),
-            data={script_path.name: script_content}
+            data=config_map_files
         )
 
         try:

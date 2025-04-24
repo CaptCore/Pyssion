@@ -13,3 +13,5 @@ tmp.*
 .pyssioncache
 pyssioncache.json
 req.txt
+# Ignore test env
+.env

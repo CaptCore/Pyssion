@@ -1,14 +1,11 @@
 import time
-import os
-from kubernetes import client, config
-from pathlib import Path
-from kubernetes.client.rest import ApiException
+from kubernetes import client
         
 #Container Runner
-def pyssion_job_container(minio_env: dict, pyssion_configmap_name:str = None, image="python:3.11-slim", req_file: str = None, resources: client.V1ResourceRequirements = None):
+def pyssion_job_container(minio_env: dict, pyssion_configmap_name:str = None, image="python", req_file: str = None, resources: client.V1ResourceRequirements = None):
     """
     - minio_env: {
-    #     "MINIO_ENDPOINT": 'minio_env["MINIO_ENDPOINT"]',,
+    #     "MINIO_ENDPOINT": 'minio_env["MINIO_ENDPOINT"]',
     #     "MINIO_ACCESS": "minio_env["MINIO_ACCESS"]",
     #     "MINIO_SECRET": "minio_env["MINIO_SECRET"]",
     #     "MINIO_BUCKET": "minio_env["MINIO_BUCKET"]",
@@ -30,22 +27,17 @@ def pyssion_job_container(minio_env: dict, pyssion_configmap_name:str = None, im
         client.V1EnvVar(name="PYSSION_ENTRYPOINT_FILE", value=minio_env["ENTRYPOINT_FILE"]),
     ]
 
-    #setup command
-    venv_block = (
-        'if [ ! -d ./venv ]; then '
-        'python3 -m venv venv && . venv/bin/activate && pip install --upgrade pip minio'
-        + (f' && pip install -r {req_file}' if req_file else '')
-        + '; '
-        'else '
-        '. venv/bin/activate; '
-        'fi'
-    )
     steps = [
-        venv_block,
-        'venv/bin/python /scripts/pyssion_default.py',
-        f'venv/bin/python {minio_env["ENTRYPOINT_FILE"]}',
+    'cp /scripts/minio_adapter.sh /tmp/minio_adapter.sh && chmod +x /tmp/minio_adapter.sh && cd /tmp && ./minio_adapter.sh',
+    'python3 -m venv venv',
+    'venv/bin/pip install --upgrade pip minio',
+    'venv/bin/python /scripts/k8s_uploader.py',
     ]
 
+    if req_file:
+        steps.append(f'venv/bin/pip install -r {req_file}')
+
+    steps.append(f'venv/bin/python {minio_env["ENTRYPOINT_FILE"]}')
     cmd = " && ".join(steps)
 
     container = client.V1Container(
@@ -54,8 +46,9 @@ def pyssion_job_container(minio_env: dict, pyssion_configmap_name:str = None, im
         command=["sh", "-c"],
         args=[cmd],
         env=env_vars,
+        security_context=client.V1SecurityContext(privileged=True),
         volume_mounts=[
-            client.V1VolumeMount(name=pyssion_configmap_name, mount_path="/scripts")
+            client.V1VolumeMount(name=pyssion_configmap_name, mount_path="/scripts"),
         ],
         resources=resources,
         working_dir="/app/code"
@@ -107,88 +100,3 @@ def logviewer(namespace, job_name):
     )
 
     print(f"\n📦 print log (Pod: {pod_name}):\n{'-' * 30}\n{logs}\n{'-' * 30}")
-
-
-#for run container configmap, use this function
-def create_configmap_from_file(
-    namespace: str,
-    name: str = None,
-    file_path: str = None,
-    key: str = None,
-    config_file: str = None
-):
-    """
-    Read ConfigMap file
-    name: str ConfigMap '{name}',
-    namespace: str ConfigMap '{namespace}',
-    file_path: str ConfigMap '{file_path}',
-    key: str = None ConfigMap '{key}',
-    config_file: str = None ConfigMap '{config_file}'
-    """
-
-    # 1) Config File Load
-    if config_file == None:
-        config.load_kube_config()
-    else:
-        config.load_kube_config(config_file=config_file)
-
-    # 3) Read File
-    if file_path == None:
-        pkg_dir = Path(__file__).parent
-        script_path = Path(os.path.join(pkg_dir,"runner_container/k8s_uploader.py"))
-    else:
-        script_path = Path(file_path)
-    script_content = script_path.read_text(encoding="utf-8")
-    data_key = key or script_path.name
-
-    # 4) Create V1ConfigMap Object
-    cm = client.V1ConfigMap(
-        metadata=client.V1ObjectMeta(name=name),
-        data={data_key: script_content}
-    )
-
-    # 5) Create ConfigMap by Request API
-    v1 = client.CoreV1Api()
-    try:
-        v1.create_namespaced_config_map(namespace=namespace, body=cm)
-        print(f"ConfigMap '{name}' created in namespace '{namespace}'.")
-    except ApiException as e:
-        if e.status == 409:
-            # Already Exist, than process patch
-            v1.patch_namespaced_config_map(name=name, namespace=namespace, body=cm)
-            print(f"ConfigMap '{name}' patched (already existed).")
-        else:
-            raise
-
-def ensure_pvc(core:client.CoreV1Api ,pvc_name: str, namespace: str, size: str = "1Gi", storage_class: str = None):
-    """
-    Create PVC
-    If PVC already Exist, than Pass
-    - pvc_name: str -> PVC's name
-    - namespace: str -> kubernetes node namespace
-    - size: Request Storage Size (example: "5Gi")
-    - storage_class: StorageClass Name (None = Default)
-    """
-    pvc_body = client.V1PersistentVolumeClaim(
-        metadata=client.V1ObjectMeta(name=pvc_name),
-        spec=client.V1PersistentVolumeClaimSpec(
-            access_modes=["ReadWriteOnce"],
-            resources=client.V1ResourceRequirements(
-                requests={"storage": size}
-            ),
-            storage_class_name=storage_class
-        )
-    )
-    try:
-        core.create_namespaced_persistent_volume_claim(
-            namespace=namespace,
-            body=pvc_body
-        )
-        print(f"✅ Create PVC '{pvc_name}'")
-        return core
-    except ApiException as e:
-        if e.status == 409:
-            print(f"ℹ️ PVC '{pvc_name}' already Created")
-            return None
-        else:
-            raise
