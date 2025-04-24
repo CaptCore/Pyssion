@@ -28,7 +28,7 @@ def pyssion_job_container(minio_env: dict, pyssion_configmap_name:str = None, im
     ]
 
     steps = [
-    'cp /scripts/minio_adapter.sh /tmp/minio_adapter.sh && chmod +x /tmp/minio_adapter.sh && cd /tmp && ./minio_adapter.sh',
+    'cp /scripts/minio_adapter.sh /tmp/minio_adapter.sh && chmod +x /tmp/minio_adapter.sh && /tmp/minio_adapter.sh',
     'python3 -m venv venv',
     'venv/bin/pip install --upgrade pip minio',
     'venv/bin/python /scripts/k8s_uploader.py',
@@ -38,6 +38,7 @@ def pyssion_job_container(minio_env: dict, pyssion_configmap_name:str = None, im
         steps.append(f'venv/bin/pip install -r {req_file}')
 
     steps.append(f'venv/bin/python {minio_env["ENTRYPOINT_FILE"]}')
+    steps.append(f"mc mirror /mnt/minio myminio/{minio_env['MINIO_BUCKET']}/{minio_env['MINIO_PREFIX']}")
     cmd = " && ".join(steps)
 
     container = client.V1Container(
@@ -46,12 +47,12 @@ def pyssion_job_container(minio_env: dict, pyssion_configmap_name:str = None, im
         command=["sh", "-c"],
         args=[cmd],
         env=env_vars,
-        security_context=client.V1SecurityContext(privileged=True),
+        security_context=client.V1SecurityContext(privileged=False,capabilities=client.V1Capabilities(add=["SYS_ADMIN"])),
         volume_mounts=[
             client.V1VolumeMount(name=pyssion_configmap_name, mount_path="/scripts"),
         ],
         resources=resources,
-        working_dir="/app/code"
+        working_dir="/mnt/minio"
     )
 
     volume = client.V1Volume(
