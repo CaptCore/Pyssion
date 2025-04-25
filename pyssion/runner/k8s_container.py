@@ -52,7 +52,7 @@ def pyssion_job_container(minio_env: dict, pyssion_configmap_name:str = None, im
             client.V1VolumeMount(name=pyssion_configmap_name, mount_path="/scripts"),
         ],
         resources=resources,
-        working_dir="/mnt/minio"
+        working_dir="/app/code"
     )
 
     volume = client.V1Volume(
