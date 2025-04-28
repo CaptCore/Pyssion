@@ -1,8 +1,12 @@
 import time
 from kubernetes import client
+import docker
+from docker.errors import BuildError
+
+from pyssion.core_util.path_util import generate_random_string
         
 #Container Runner
-def pyssion_job_container(minio_env: dict, pyssion_configmap_name:str = None, image="python", req_file: str = None, resources: client.V1ResourceRequirements = None):
+def pyssion_job_container(minio_env: dict, minio_mirror:bool = False, pyssion_configmap_name:str = None, image="python", req_file: str = None, resources: client.V1ResourceRequirements = None):
     """
     - minio_env: {
     #     "MINIO_ENDPOINT": 'minio_env["MINIO_ENDPOINT"]',
@@ -17,8 +21,47 @@ def pyssion_job_container(minio_env: dict, pyssion_configmap_name:str = None, im
     if pyssion_configmap_name == None:
         pyssion_configmap_name = "pyssion-cache-script"
 
-    # 1) EnvVars 설정
-    env_vars = [
+    # 1) EnvVars
+    env_vars = container_env_var_builder(minio_env)
+    cmd = command_builder(minio_env,minio_mirror,req_file)
+
+    container = client.V1Container(
+        name="pyssion-job-runner",
+        image=image,
+        command=["sh", "-c"],
+        args=[cmd],
+        env=env_vars,
+        security_context=client.V1SecurityContext(privileged=False,capabilities=client.V1Capabilities(add=["SYS_ADMIN"])),
+        volume_mounts=[client.V1VolumeMount(name=pyssion_configmap_name, mount_path="/scripts"),],
+        resources=resources,
+        working_dir="/app/code"
+    )
+
+    #volume build
+    volume = client.V1Volume(name=pyssion_configmap_name,config_map=client.V1ConfigMapVolumeSource(name=pyssion_configmap_name))
+
+    return container, volume
+
+def command_builder(minio_env:dict,req_file:str=None,minio_mirror:bool=False,sync_minio:bool=False)->str:
+    steps = ["echo 🚀PYSSION JOB START"]
+    if minio_mirror == True:
+        steps.append('cp /scripts/minio_adapter.sh /tmp/minio_adapter.sh && chmod +x /tmp/minio_adapter.sh && /tmp/minio_adapter.sh')
+    
+    steps.append('python3 -m venv venv')
+    steps.append('venv/bin/pip install --upgrade pip minio')
+    steps.append('venv/bin/python /scripts/k8s_uploader.py')
+    if req_file:
+        steps.append(f'venv/bin/pip install -r {req_file}')
+    steps.append(f'venv/bin/python {minio_env["ENTRYPOINT_FILE"]}')
+    if minio_mirror == True:
+        steps.append(f"mc mirror --exclude 'venv/*' /mnt/minio myminio/{minio_env['MINIO_BUCKET']}/{minio_env['MINIO_PREFIX']}")
+    steps.append("echo 🎉PYSSION JOB FINISHED")
+    
+    cmd = " && ".join(steps)
+    return cmd
+
+def container_env_var_builder(minio_env:dict)->list:
+    return [
         client.V1EnvVar(name="PYSSION_MINIO_ENDPOINT", value=minio_env["MINIO_ENDPOINT"]),
         client.V1EnvVar(name="PYSSION_MINIO_ACCESSKEY", value=minio_env["MINIO_ACCESS"]),
         client.V1EnvVar(name="PYSSION_MINIO_SECRETKEY", value=minio_env["MINIO_SECRET"]),
@@ -27,41 +70,22 @@ def pyssion_job_container(minio_env: dict, pyssion_configmap_name:str = None, im
         client.V1EnvVar(name="PYSSION_ENTRYPOINT_FILE", value=minio_env["ENTRYPOINT_FILE"]),
     ]
 
-    steps = [
-    'cp /scripts/minio_adapter.sh /tmp/minio_adapter.sh && chmod +x /tmp/minio_adapter.sh && cd /tmp && ./minio_adapter.sh',
-    'python3 -m venv venv',
-    'venv/bin/pip install --upgrade pip minio',
-    'venv/bin/python /scripts/k8s_uploader.py',
-    ]
-
-    if req_file:
-        steps.append(f'venv/bin/pip install -r {req_file}')
-
-    steps.append(f'venv/bin/python {minio_env["ENTRYPOINT_FILE"]}')
-    cmd = " && ".join(steps)
-
-    container = client.V1Container(
-        name="pyssion-job-runner",
-        image=image,
-        command=["sh", "-c"],
-        args=[cmd],
-        env=env_vars,
-        security_context=client.V1SecurityContext(privileged=True),
-        volume_mounts=[
-            client.V1VolumeMount(name=pyssion_configmap_name, mount_path="/scripts"),
-        ],
-        resources=resources,
-        working_dir="/app/code"
-    )
-
-    volume = client.V1Volume(
-        name=pyssion_configmap_name,
-        config_map=client.V1ConfigMapVolumeSource(name=pyssion_configmap_name)
-    )
-
-    return container, volume
-
-
+def container_builder(dockerfile:str,tag:str=None,docker_env:dict = None)->str:
+    if docker_env == None:
+        client = docker.client.from_env()
+    else:
+        client = docker.DockerClient(base_url=docker_env["host_url"])
+    if tag == None:
+        tag = generate_random_string()
+    image, logs = client.images.build(path=dockerfile, tag=tag)
+    try:
+        for log in logs:
+                if "stream" in log:
+                    print(log["stream"].strip())
+        print(f"✅ Successfully built image: {image.tags}")
+    except BuildError as e:
+        print(f"❌ Build failed: {e}")
+    return image,logs,tag
 
 #Container Time check
 def timer(namespace, job_name,ignore=None):

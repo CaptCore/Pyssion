@@ -20,6 +20,7 @@ class KubernetesJobLauncher(origin_pyssion):
         namespace: str,
         minio_env: dict,
         resource: client.V1ResourceRequirements,
+        minio_mirror: bool = False,
         req_file: str = None,
         config_file: str = None,
         ssl_ignore: bool = False
@@ -49,6 +50,11 @@ class KubernetesJobLauncher(origin_pyssion):
         else:
             config.load_kube_config()
 
+        if minio_mirror == False:
+            self._minio_mirror = False
+        else:
+            self._minio_mirror = True
+
         # Configure SSL verification
         conf = Configuration.get_default_copy()
         conf.verify_ssl = not ssl_ignore
@@ -76,7 +82,14 @@ class KubernetesJobLauncher(origin_pyssion):
             self._create_minio_configmap()
         except:
             print("Can't Create Config Map")
-        container, volume = pyssion_job_container(self._minio_env,pyssion_configmap_name=self._job_name,image=self._image, req_file=self._req_file, resources=self._resource)
+        container, volume = pyssion_job_container(
+            self._minio_env,
+            minio_mirror=self._minio_mirror,
+            pyssion_configmap_name=self._job_name,
+            image=self._image, 
+            req_file=self._req_file, 
+            resources=self._resource
+            )
 
         if self._create_pvc(
                 name=pvc_name,
@@ -88,12 +101,10 @@ class KubernetesJobLauncher(origin_pyssion):
             print(f"👌 Create PVC")
         else:
             print(f"🚨 Can't Get PVC data")
-        
-        volumes.append(client.V1Volume(name="dev-fuse",host_path=client.V1HostPathVolumeSource(path="/dev/fuse",type="CharDevice")))
+
         volumes.append(client.V1Volume(name="data",persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(claim_name=pvc_name)))
 
         volume_mounts.append(client.V1VolumeMount(name="data",mount_path="/app/code"))
-        volume_mounts.append(client.V1VolumeMount(name="dev-fuse",mount_path="/dev/fuse"))
         # Update volume List
         volumes.append(volume)
         # Update container
