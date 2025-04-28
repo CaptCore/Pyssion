@@ -41,7 +41,7 @@ echo "📂 Make Ount Dir Successfully"
 
 # 6. Run mc mirror (MinIO -> Local)
 echo "📂 Syncing from MinIO bucket '$BUCKET/$PREFIX' to '$MOUNT_DIR'..."
-mc mirror --overwrite "myminio/$BUCKET/$PREFIX" "$MOUNT_DIR"
+mc mirror --overwrite --exclude "venv/*" "myminio/$BUCKET/$PREFIX" "$MOUNT_DIR"
 
 # 7. Done
 echo "✅ Sync completed. Contents are available at $MOUNT_DIR"
