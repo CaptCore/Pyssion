@@ -36,6 +36,7 @@ class Pyssion(origin_pyssion):
         print("✅ Get Pyssion Config Data!")
         print(f"Pyssion job name : {self._unique_job_name}")
         print("✅ Create PVC")
+        
         self._create_configmap_with_zipped_code()
         job_launcher = KubernetesJobCreator(
             image="python",
@@ -46,6 +47,7 @@ class Pyssion(origin_pyssion):
             entrypoint_file=self._entrypoint_file
         ).build_job_spec()
         self._batch_v1.create_namespaced_job(namespace=self._namespace, body=job_launcher)
+        
     
     @error_wrapper
     def _create_configmap_with_zipped_code(self):
@@ -123,31 +125,6 @@ class Pyssion(origin_pyssion):
                 "limits": {"nvidia.com/gpu": str(gpus)},
             }
         return None
-    
-    @error_wrapper
-    def minio_setup(self,minio_config:dict):
-        from pyssion.saver.minio_client import MinioUploader
-        import json
-        import uuid
-        
-        caller_path = self._path_finder("caller_path")
-        project_dir = Path(self._path_finder("caller_dir"))
-        cache_file = project_dir / ".pyssioncache"
-        if cache_file.exists():
-            data = json.loads(cache_file.read_text(encoding="utf-8"))
-            unique_id = data.get("prefix")
-        else:
-            unique_id = str(uuid.uuid4())[:8]
-            cache_file.write_text(json.dumps({"prefix": unique_id}), encoding="utf-8")
-        modified_path = self._comment_out_pyssion_block(caller_path)
-        uploader = MinioUploader(minio_config)
-        uploader.upload_all(project_dir, prefix=unique_id)
-        uploader.upload_single(
-            modified_path,
-            prefix=unique_id,
-            object_name=f"{unique_id}/{caller_path.name}"
-        )
-        return self._decode_k8s_config(unique_id=unique_id)
     
     def _path_finder(self,locate):
         import inspect

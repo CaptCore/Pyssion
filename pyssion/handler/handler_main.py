@@ -1,6 +1,7 @@
+import sys
 class origin_pyssion:
     def __init__(self):
-        name = "Pyssion"
-    def _handle_error(self,Exception):
-        print(f"[{self.name} ERROR]: {Exception!r}")
-        raise SyntaxError
+        self.name = "Pyssion"
+    def _handle_error(self, exception: Exception):
+        print(f"[{self.name} ERROR]: {exception!r}")
+        sys.exit(1)
