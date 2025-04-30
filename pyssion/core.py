@@ -1,10 +1,11 @@
 # pyssion/core.py
+import time
 import io
 import zipfile
 import base64
 import json
 from pathlib import Path
-from kubernetes import client, config
+from kubernetes import client, config, watch
 from kubernetes.client import Configuration
 from kubernetes.client.exceptions import ApiException
 
@@ -51,29 +52,40 @@ class Pyssion(origin_pyssion):
             entrypoint_file=self._entrypoint_file
         ).build_job_spec()
         self._batch_v1.create_namespaced_job(namespace=self._namespace, body=job_launcher)
-        status = timer(self._namespace, self._unique_job_name,ignore=True)
-        logviewer(self._namespace, self._unique_job_name)
-        print(f"Job status: {status}")
-    
+        self._stream_pod_logs()
+
     @error_wrapper
-    def _delete_k8s_job(self,namespace: str, job_name: str):
-        # propagation_policy='Foreground' = delete all pod
+    def _delete_k8s_job(self, namespace: str, job_name: str, wait: bool = True, timeout: int = 60):
         try:
             response = self._batch_v1.delete_namespaced_job(
                 name=job_name,
                 namespace=namespace,
                 body=client.V1DeleteOptions(propagation_policy='Foreground')
             )
-            print(f"✅ Job '{job_name}' deleted in namespace '{namespace}'")
+            print(f"🗑️ Deletion requested for Job '{job_name}' in namespace '{namespace}'")
+
+            if wait:
+                for i in range(timeout):
+                    try:
+                        self._batch_v1.read_namespaced_job(job_name, namespace)
+                        print(f"⏳ Waiting for Job '{job_name}' to be deleted... ({i+1}s)")
+                        time.sleep(1)
+                    except ApiException as e:
+                        if e.status == 404:
+                            print(f"✅ Job '{job_name}' fully deleted.")
+                            return True
+                        else:
+                            raise
+                raise TimeoutError(f"❌ Timed out: Job '{job_name}' was not deleted within {timeout} seconds.")
+
             return response
         except ApiException as e:
             if e.status == 404:
-                print(f"ℹ️ Job '{job_name}' Can't Find → Can Create New Job")
+                print(f"ℹ️ Job '{job_name}' not found → Ready to create new.")
                 return False
             else:
                 raise
         
-    
     @error_wrapper
     def _create_configmap_with_zipped_code(self):
         caller_dir = Path(self._path_finder("caller_dir"))
@@ -159,3 +171,56 @@ class Pyssion(origin_pyssion):
             return caller_path
         elif locate == "caller_dir":
             return caller_path.parent.resolve().as_posix()
+    
+    @error_wrapper
+    def _stream_pod_logs(self):
+        try:
+            pod_name = self._wait_for_pod()
+        except TimeoutError as e:
+            print(str(e))
+            return
+        pods = self._core_v1.list_namespaced_pod(self._namespace, label_selector=f"job-name={self._unique_job_name}")
+        pod_name = pods.items[0].metadata.name
+
+        w = watch.Watch()
+        for line in w.stream(
+            self._core_v1.read_namespaced_pod_log,
+            name=pod_name,
+            namespace=self._namespace,
+            follow=True,
+            _preload_content=False,
+        ):
+            print(line.strip() if isinstance(line, str) else line.decode("utf-8").strip())
+    
+    def _wait_for_pod(self, timeout: int = 60) -> str:
+        """
+        Wait until job pod is created and ready to stream logs.
+        Returns:
+            pod_name (str)
+        """
+        for _ in range(timeout):
+            pods = self._core_v1.list_namespaced_pod(
+                namespace=self._namespace,
+                label_selector=f"job-name={self._unique_job_name}"
+            )
+
+            if pods.items:
+                pod = pods.items[0]
+                phase = pod.status.phase
+                if phase in ["Running", "Succeeded", "Failed"]:
+                    return pod.metadata.name
+                elif phase == "Pending" and pod.status.container_statuses:
+                    state = pod.status.container_statuses[0].state
+                    if state.waiting:
+                        reason = state.waiting.reason
+                        print(f"⏳ Pod is pending... Reason: {reason}")
+                    else:
+                        print("⏳ Pod is pending... No detailed reason available.")
+                else:
+                    print(f"⏳ Pod status: {phase}")
+            else:
+                print("⏳ Waiting for pod to appear...")
+
+            time.sleep(1)
+
+        raise TimeoutError("❌ Pod did not appear within timeout.")

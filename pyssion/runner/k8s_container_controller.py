@@ -154,8 +154,7 @@ def logviewer(namespace, job_name):
     logs = core.read_namespaced_pod_log(
     name=pod_name,
     namespace=namespace,
-    tail_lines=None,
-    limit_bytes=None
+    since_seconds=60
     )
 
     print(f"\n📦 print log (Pod: {pod_name}):\n{'-' * 30}\n{logs}\n{'-' * 30}")
