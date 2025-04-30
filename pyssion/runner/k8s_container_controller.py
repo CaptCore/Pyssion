@@ -1,12 +1,21 @@
 import time
 from kubernetes import client
+from pathlib import Path
 import docker
 from docker.errors import BuildError
 
 from pyssion.core_util.path_util import generate_random_string
         
 #Container Runner
-def pyssion_job_container(minio_env: dict, minio_mirror:bool = False, pyssion_configmap_name:str = None, image="python", req_file: str = None, resources: client.V1ResourceRequirements = None):
+def pyssion_job_container(
+    minio_env: dict = None, 
+    minio_mirror:bool = False, 
+    pyssion_configmap_name:str = None, 
+    image="python", 
+    req_file: str = None, 
+    resources: client.V1ResourceRequirements = None,
+    entrypoint_file:str = None
+    ):
     """
     - minio_env: {
     #     "MINIO_ENDPOINT": 'minio_env["MINIO_ENDPOINT"]',
@@ -22,8 +31,11 @@ def pyssion_job_container(minio_env: dict, minio_mirror:bool = False, pyssion_co
         pyssion_configmap_name = "pyssion-cache-script"
 
     # 1) EnvVars
-    env_vars = container_env_var_builder(minio_env)
-    cmd = command_builder(minio_env,minio_mirror,req_file)
+    if minio_env != None:
+        env_vars = container_env_var_builder(minio_env)
+    else:
+        env_vars = []
+    cmd = command_builder(req_file=req_file,entrypoint_file=entrypoint_file)
 
     container = client.V1Container(
         name="pyssion-job-runner",
@@ -42,23 +54,48 @@ def pyssion_job_container(minio_env: dict, minio_mirror:bool = False, pyssion_co
 
     return container, volume
 
-def command_builder(minio_env:dict,req_file:str=None,minio_mirror:bool=False,sync_minio:bool=False)->str:
+
+
+def command_builder(req_file: str = None, entrypoint_file:str = "main.py", minio_mirror: bool = False) -> str:
     steps = ["echo 🚀PYSSION JOB START"]
+    steps.append("echo WORK DIR : $PWD")
+    steps.append("echo ❗COPY scripts code")
+    steps.append(f"base64 -d /scripts/code.zip.b64 > /tmp/code.zip")
+    steps.append("unzip /tmp/code.zip -d /app/code")
+    steps.append(f"cat $PWD/{req_file}")
+    # 1. MinIO mount option
     if minio_mirror == True:
         steps.append('cp /scripts/minio_adapter.sh /tmp/minio_adapter.sh && chmod +x /tmp/minio_adapter.sh && /tmp/minio_adapter.sh')
-    
+    else:
+        steps.append("echo ❗SKIPPED minio SETUP")
+    # 2. venv create
+    steps.append("echo 🚀 Create Python VENV")
     steps.append('python3 -m venv venv')
-    steps.append('venv/bin/pip install --upgrade pip minio')
-    steps.append('venv/bin/python /scripts/k8s_uploader.py')
-    if req_file:
+    steps.append('venv/bin/pip install --upgrade pip')
+
+    # 3. install requirements
+    if req_file != None:
+        steps.append("echo 🚀 PYTHON env build")
         steps.append(f'venv/bin/pip install -r {req_file}')
-    steps.append(f'venv/bin/python {minio_env["ENTRYPOINT_FILE"]}')
+    else:
+        steps.append("echo ❗SKIPPED python env build")
+    # 4. launch entrypoint file
+    steps.append("echo List of /app/code files")
+    steps.append("ls")
+    steps.append(f'venv/bin/python {entrypoint_file}')
+
+    # 5. minio mirror (option)
     if minio_mirror == True:
-        steps.append(f"mc mirror --exclude 'venv/*' /mnt/minio myminio/{minio_env['MINIO_BUCKET']}/{minio_env['MINIO_PREFIX']}")
+        steps.append("mc mirror --exclude 'venv/*' /mnt/minio myminio/bucket/prefix")
+    else:
+        steps.append("echo ❗SKIPPED minio mirror")
+
+    # 6. End log
     steps.append("echo 🎉PYSSION JOB FINISHED")
-    
-    cmd = " && ".join(steps)
-    return cmd
+
+    # return command
+    return " && ".join(steps)
+
 
 def container_env_var_builder(minio_env:dict)->list:
     return [
@@ -124,3 +161,24 @@ def logviewer(namespace, job_name):
     )
 
     print(f"\n📦 print log (Pod: {pod_name}):\n{'-' * 30}\n{logs}\n{'-' * 30}")
+
+
+def create_configmap_from_directory(configmap_name, directory: Path, modified_entrypoint: Path = None, namespace="default"):
+    data = {}
+
+    for path in directory.rglob("*.py"):
+        if path.is_file():
+            rel_path = path.relative_to(directory).as_posix()
+            if modified_entrypoint and path.samefile(modified_entrypoint):
+                content = modified_entrypoint.read_text(encoding="utf-8")
+            else:
+                content = path.read_text(encoding="utf-8")
+            data[rel_path] = content
+
+    configmap = client.V1ConfigMap(
+        metadata=client.V1ObjectMeta(name=configmap_name),
+        data=data
+    )
+
+    api = client.CoreV1Api()
+    api.create_namespaced_config_map(namespace=namespace, body=configmap)
