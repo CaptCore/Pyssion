@@ -13,7 +13,8 @@ def pyssion_job_container(
     pyssion_configmap_name:str = None, 
     image="python", 
     req_file: str = None, 
-    resources: client.V1ResourceRequirements = None
+    resources: client.V1ResourceRequirements = None,
+    entrypoint_file:str = None
     ):
     """
     - minio_env: {
@@ -34,7 +35,7 @@ def pyssion_job_container(
         env_vars = container_env_var_builder(minio_env)
     else:
         env_vars = []
-    cmd = command_builder(minio_env,minio_mirror,req_file)
+    cmd = command_builder(req_file=req_file,entrypoint_file=entrypoint_file)
 
     container = client.V1Container(
         name="pyssion-job-runner",
@@ -53,32 +54,46 @@ def pyssion_job_container(
 
     return container, volume
 
-def command_builder(req_file: str = None, minio_mirror: bool = False, sync_minio: bool = False) -> str:
+
+
+def command_builder(req_file: str = None, entrypoint_file:str = "main.py", minio_mirror: bool = False) -> str:
     steps = ["echo 🚀PYSSION JOB START"]
-
-    # 1. MinIO 마운트 연동 (옵션)
-    if minio_mirror:
+    steps.append("echo WORK DIR : $PWD")
+    steps.append("echo ❗COPY scripts code")
+    steps.append(f"base64 -d /scripts/code.zip.b64 > /tmp/code.zip")
+    steps.append("unzip /tmp/code.zip -d /app/code")
+    steps.append(f"cat $PWD/{req_file}")
+    # 1. MinIO mount option
+    if minio_mirror == True:
         steps.append('cp /scripts/minio_adapter.sh /tmp/minio_adapter.sh && chmod +x /tmp/minio_adapter.sh && /tmp/minio_adapter.sh')
-
-    # 2. 가상 환경 생성 및 기본 모듈 설치
+    else:
+        steps.append("echo ❗SKIPPED minio SETUP")
+    # 2. venv create
+    steps.append("echo 🚀 Create Python VENV")
     steps.append('python3 -m venv venv')
     steps.append('venv/bin/pip install --upgrade pip')
 
-    # 3. requirements 설치
-    if req_file:
+    # 3. install requirements
+    if req_file != None:
+        steps.append("echo 🚀 PYTHON env build")
         steps.append(f'venv/bin/pip install -r {req_file}')
+    else:
+        steps.append("echo ❗SKIPPED python env build")
+    # 4. launch entrypoint file
+    steps.append("echo List of /app/code files")
+    steps.append("ls")
+    steps.append(f'venv/bin/python {entrypoint_file}')
 
-    # 4. 엔트리포인트 실행 (고정 경로)
-    steps.append('venv/bin/python /app/code/main.py')
-
-    # 5. 작업 후 MinIO 미러링
-    if minio_mirror:
+    # 5. minio mirror (option)
+    if minio_mirror == True:
         steps.append("mc mirror --exclude 'venv/*' /mnt/minio myminio/bucket/prefix")
+    else:
+        steps.append("echo ❗SKIPPED minio mirror")
 
-    # 6. 종료 로그
+    # 6. End log
     steps.append("echo 🎉PYSSION JOB FINISHED")
 
-    # 최종 커맨드 생성
+    # return command
     return " && ".join(steps)
 
 
