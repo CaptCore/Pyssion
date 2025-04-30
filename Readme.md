@@ -27,24 +27,19 @@ sys.dont_write_bytecode = True
 from pyssion.core import Pyssion
 
 if __name__ == "__main__":
+    # gpus not required,, and req_file too.
+    # Need to upload req.txt, if you want to install python env
+    # you can ignore some files to upload by using ".pyssionignore" file, which looks like ".gitignore" file.
+    # You must setup entrypoint file. or, your entry point file's name must be setup main
     p = Pyssion(
-        minio_config={
-            "endpoint": "localhost:9000",  # MinIO or S3
-            "access_key": "minioid",
-            "secret_key": "minio1234",
-            "bucket": "pyssion"
-        },
         k8s_config={
-            "config_file":"your_k8s_config.yaml"
+            "config_file":"s2.yaml"
         },
         gpus=1,
         req_file="req.txt",
-        entrypoint_file="main.py"
+        entrypoint_file="tmp2.py"
     )
-    #entrypoint_file not required, gpus, and req_file too.
-    #you can ignore some files to upload by using ".pyssionignore" file, which looks like ".gitignore" file.
-    p.run(warn_ignore=True,ssl_ignore=True)
-    #ssl_ignore is just for test env, not for your code env.
+    p.run()
 
 ```
 
