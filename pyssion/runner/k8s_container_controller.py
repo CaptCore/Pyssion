@@ -54,8 +54,6 @@ def pyssion_job_container(
 
     return container, volume
 
-
-
 def command_builder(req_file: str = None, entrypoint_file:str = "main.py", minio_mirror: bool = False) -> str:
     steps = ["echo 🚀PYSSION JOB START"]
     steps.append("echo WORK DIR : $PWD")

@@ -6,11 +6,13 @@ import json
 from pathlib import Path
 from kubernetes import client, config
 from kubernetes.client import Configuration
+from kubernetes.client.exceptions import ApiException
 
 from pyssion.core_util.path_util import generate_random_string
 from pyssion.saver.pyssion_ignore import load_ignore_patterns, should_ignore
 from pyssion.handler.handler_main import origin_pyssion
 from pyssion.runner.k8s_job_creator import KubernetesJobCreator
+from pyssion.runner.k8s_container_controller import timer,logviewer
 from pyssion.handler.error_handler import error_wrapper
 
 class Pyssion(origin_pyssion):
@@ -33,6 +35,8 @@ class Pyssion(origin_pyssion):
     def run(self):
         print("✅ pyssion Fission!")
         self.kuberenetes_config(self._k8s_config)
+        if self._delete_k8s_job(self._namespace,self._unique_job_name):
+            print("🗑️ Delete pre k8s Job")
         print("✅ Get Pyssion Config Data!")
         print(f"Pyssion job name : {self._unique_job_name}")
         print("✅ Create PVC")
@@ -47,6 +51,27 @@ class Pyssion(origin_pyssion):
             entrypoint_file=self._entrypoint_file
         ).build_job_spec()
         self._batch_v1.create_namespaced_job(namespace=self._namespace, body=job_launcher)
+        status = timer(self._namespace, self._unique_job_name,ignore=True)
+        logviewer(self._namespace, self._unique_job_name)
+        print(f"Job status: {status}")
+    
+    @error_wrapper
+    def _delete_k8s_job(self,namespace: str, job_name: str):
+        # propagation_policy='Foreground' = delete all pod
+        try:
+            response = self._batch_v1.delete_namespaced_job(
+                name=job_name,
+                namespace=namespace,
+                body=client.V1DeleteOptions(propagation_policy='Foreground')
+            )
+            print(f"✅ Job '{job_name}' deleted in namespace '{namespace}'")
+            return response
+        except ApiException as e:
+            if e.status == 404:
+                print(f"ℹ️ Job '{job_name}' Can't Find → Can Create New Job")
+                return False
+            else:
+                raise
         
     
     @error_wrapper
