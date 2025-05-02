@@ -20,6 +20,31 @@ pip install -e .
 
 ## how to use
 
+```
+# --- MinIO setting ---
+MINIO_ENDPOINT=minio address
+MINIO_ACCESS=minio id
+MINIO_SECRET=minio password
+MINIO_BUCKET=minio bucket
+
+# --- Kubernetes setting ---
+K8S_CONFIG=local.yaml
+K8S_NAMESPACE=default  # if you didn't set this, we will use default set.
+
+# --- entrypoint setting ---
+ENTRYPOINT_FILE= your_entrypoint.py
+REQ_FILE=req.txt
+
+# --- Resource setting ---
+GPU=1 #we can use only NVIDIA, We will soon update. Sorry !
+
+# --- venv setting ---
+USE_VENV_CACHE=0
+
+# --- pyssion Cache drop setting ---
+DELETE_PVC_AFTER_JOB=1
+```
+
 ```python
 #test_code.py
 import sys
@@ -31,14 +56,7 @@ if __name__ == "__main__":
     # Need to upload req.txt, if you want to install python env
     # you can ignore some files to upload by using ".pyssionignore" file, which looks like ".gitignore" file.
     # You must setup entrypoint file. or, your entry point file's name must be setup main
-    p = Pyssion(
-        k8s_config={
-            "config_file":"s2.yaml"
-        },
-        gpus=1,
-        req_file="req.txt",
-        entrypoint_file="tmp2.py"
-    )
+    p = Pyssion()
     p.run()
 
 ```

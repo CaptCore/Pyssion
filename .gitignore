@@ -11,6 +11,7 @@ tmp.*
 # Ignore pyssion test
 .pyssionignore
 .pyssioncache
+.pyssionenv
 pyssioncache.json
 req.txt
 # Ignore test env
