@@ -1,42 +1,58 @@
-# PowerShell 스크립트: refactor-pyssion.ps1
+param (
+    [string]$LibraryDir = "lib",           # Directory for library source code
+    [string]$ExampleDir = "examples",      # Directory for example/demo scripts
+    [string]$ScriptDir = "scripts",        # Directory for utility or setup scripts
+    [string]$TestDir = "tests"             # Directory for test files
+)
 
-# 이동 대상 폴더 설정
-$libDir = "pyssion_lib"
-$exampleDir = "examples"
-$scriptDir = "scripts"
-$testDir = "tests"
-
-# 새 폴더 생성
-New-Item -ItemType Directory -Path $libDir -Force
-New-Item -ItemType Directory -Path $exampleDir -Force
-New-Item -ItemType Directory -Path $scriptDir -Force
-New-Item -ItemType Directory -Path $testDir -Force
-
-# Pyssion 라이브러리 코드 이동
-Move-Item -Path "pyssion" -Destination "$libDir/pyssion" -Force
-
-# 테스트 / tmp 코드 분리
-$exampleFiles = @("tmp.py", "tmp2.py", "tmp3.py", "tmp4.py", "archiveCode\test")
-foreach ($file in $exampleFiles) {
-    if (Test-Path $file) {
-        Move-Item -Path $file -Destination $exampleDir -Force
+# Create target directories if they do not exist
+$dirsToCreate = @($LibraryDir, $ExampleDir, $ScriptDir, $TestDir)
+foreach ($dir in $dirsToCreate) {
+    if (-not (Test-Path $dir)) {
+        New-Item -ItemType Directory -Path $dir | Out-Null
     }
 }
 
-# 테스트 환경 분리
-if (Test-Path "archiveCode\runner_container") {
-    Move-Item -Path "archiveCode\runner_container" -Destination $scriptDir -Force
-}
-if (Test-Path "archiveCode\minio") {
-    Move-Item -Path "archiveCode\minio" -Destination "$libDir/pyssion/storage" -Force
+# Move Python package directories (those containing __init__.py) to library directory
+$topLevelDirs = Get-ChildItem -Directory
+foreach ($d in $topLevelDirs) {
+    if (Test-Path "$($d.FullName)\__init__.py") {
+        Write-Host "📦 Moving library folder: $($d.Name)"
+        Move-Item -Path $d.FullName -Destination "$LibraryDir\$($d.Name)" -Force
+    }
 }
 
-# .egg-info, .cache 등 제거 (원하면 주석 해제)
-# Remove-Item -Recurse -Force "pyssion.egg-info"
-# Remove-Item -Force ".pyssioncache"
+# Move temporary, test, or archive-related folders/files to examples
+$examplePatterns = @("tmp*", "*test*", "archive*")
+foreach ($pattern in $examplePatterns) {
+    Get-ChildItem -Path . -Recurse -Include $pattern -ErrorAction SilentlyContinue | ForEach-Object {
+        try {
+            Move-Item $_.FullName -Destination $ExampleDir -Force
+            Write-Host "🧪 Moving to examples: $($_.Name)"
+        } catch {
+            Write-Warning "⚠️ Failed to move: $($_.FullName)"
+        }
+    }
+}
 
-# 리포트
-Write-Host "✅ 리팩토링 완료"
-Write-Host "📂 라이브러리: $libDir"
-Write-Host "📂 예제 코드: $exampleDir"
-Write-Host "📂 유틸 스크립트: $scriptDir"
+# Move shell scripts, Docker and Kubernetes YAMLs to scripts directory
+Get-ChildItem -Path . -Recurse -Include *.sh,*.yml,docker-compose.* | ForEach-Object {
+    try {
+        Move-Item $_.FullName -Destination $ScriptDir -Force
+        Write-Host "📜 Moving script file: $($_.Name)"
+    } catch {
+        Write-Warning "⚠️ Failed to move: $($_.FullName)"
+    }
+}
+
+# Move test_*.py files to tests directory
+Get-ChildItem -Recurse -Include "test_*.py" | ForEach-Object {
+    Move-Item $_.FullName -Destination $TestDir -Force
+    Write-Host "🧪 Moving test: $($_.Name)"
+}
+
+Write-Host "`n✅ Project structure refactoring completed:"
+Write-Host "   - Library: $LibraryDir"
+Write-Host "   - Examples: $ExampleDir"
+Write-Host "   - Scripts: $ScriptDir"
+Write-Host "   - Tests: $TestDir"

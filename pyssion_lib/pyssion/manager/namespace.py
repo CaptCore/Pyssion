@@ -3,7 +3,7 @@ import string
 import os
 
 import json
-
+import inspect
 from pathlib import Path
 
 # Core Function Archive :: Later will be activate
@@ -30,8 +30,8 @@ class Pyssion_Namespace:
         self.pvc_name = f"pyssion-pvc-{self.pyssion_unique_name}"
     
     def _generate_unique_job_name(self) -> str:
-        project_dir = self._path_finder("caller_dir")
-        cache_file = Path(project_dir) / ".pyssioncache"
+        self.project_dir = self._path_finder("caller_dir")
+        cache_file = Path(self.project_dir) / ".pyssioncache"
 
         if cache_file.exists():
             data = json.loads(cache_file.read_text(encoding="utf-8"))
@@ -41,6 +41,14 @@ class Pyssion_Namespace:
             cache_file.write_text(json.dumps({"prefix": prefix}), encoding="utf-8")
 
         return prefix
+    
+    def _path_finder(self,locate):
+        caller_file = inspect.stack()[-1].filename
+        caller_path = Path(caller_file).resolve()
+        if locate == "caller_path":
+            return caller_path
+        elif locate == "caller_dir":
+            return caller_path.parent.resolve().as_posix()
     
 #Core Function Archieving
 
