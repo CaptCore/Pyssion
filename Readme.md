@@ -22,6 +22,7 @@ pip install -e .
 
 ### .pyssionignore :
 ```
+#.pyssionignore
 pyssion/
 test/
 pyssion.egg-info/
@@ -35,6 +36,7 @@ setup.py
 
 ### .pyssionenv :
 ```
+#.pyssionenv
 # --- MinIO setting ---
 MINIO_ENDPOINT=minio address
 MINIO_ACCESS=minio id
@@ -59,7 +61,7 @@ USE_VENV_CACHE=0
 DELETE_PVC_AFTER_JOB=1
 ```
 
-### runner.py :
+### test_code.py :
 ```python
 #test_code.py
 import sys
