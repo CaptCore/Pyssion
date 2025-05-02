@@ -67,10 +67,6 @@ sys.dont_write_bytecode = True
 from pyssion.core import Pyssion
 
 if __name__ == "__main__":
-    # gpus not required,, and req_file too.
-    # Need to upload req.txt, if you want to install python env
-    # you can ignore some files to upload by using ".pyssionignore" file, which looks like ".gitignore" file.
-    # You must setup entrypoint file. or, your entry point file's name must be setup main
     p = Pyssion()
     p.run()
 
