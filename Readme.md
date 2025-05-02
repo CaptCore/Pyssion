@@ -21,6 +21,21 @@ pip install -e .
 ## how to use
 
 ```
+.pyssionignore
+
+pyssion/
+test/
+pyssion.egg-info/
+.git/
+.gitignore
+*.md
+.pyssionignore
+*.yaml
+setup.py
+```
+
+```
+.pyssionenv
 # --- MinIO setting ---
 MINIO_ENDPOINT=minio address
 MINIO_ACCESS=minio id
