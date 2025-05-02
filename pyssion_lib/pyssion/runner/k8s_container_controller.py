@@ -5,17 +5,9 @@ import docker
 from docker.errors import BuildError
 
 from pyssion.core_util.path_util import generate_random_string
-        
-#Container Runner
-def pyssion_job_container(
-    minio_env: dict = None, 
-    minio_mirror:bool = False, 
-    pyssion_configmap_name:str = None, 
-    image="python", 
-    req_file: str = None, 
-    resources: client.V1ResourceRequirements = None,
-    entrypoint_file:str = None
-    ):
+
+#Init Container 
+def init_container_build(minio_env: dict,volume_name: str, pvc_name: str):
     """
     - minio_env: {
     #     "MINIO_ENDPOINT": 'minio_env["MINIO_ENDPOINT"]',
@@ -27,14 +19,48 @@ def pyssion_job_container(
     # }
     - req_file: req_file
     """
-    if pyssion_configmap_name == None:
-        pyssion_configmap_name = "pyssion-cache-script"
+    MINIO_ENDPOINT = minio_env["MINIO_ENDPOINT"],
+    MINIO_ACCESS = minio_env["MINIO_ACCESS"],
+    MINIO_SECRET = minio_env["MINIO_SECRET"],
+    MINIO_BUCKET= minio_env["MINIO_BUCKET"],
+    MINIO_PREFIX = minio_env["MINIO_PREFIX"]
 
-    # 1) EnvVars
-    if minio_env != None:
-        env_vars = container_env_var_builder(minio_env)
-    else:
-        env_vars = []
+    init_container = client.V1Container(
+        name="init-data",
+        image="minio/mc:latest",
+        command=[
+            "sh", "-c",
+            "mc alias set S3 ${MINIO_ENDPOINT} ${MINIO_ACCESS} ${MINIO_SECRET} && "
+            "mc mirror S3/${MINIO_BUCKET}/${MINIO_PREFIX} /data"
+        ],
+        env=[
+            client.V1EnvVar(name="MINIO_ENDPOINT", value=MINIO_ENDPOINT),
+            client.V1EnvVar(name="MINIO_ACCESS", value=MINIO_ACCESS),
+            client.V1EnvVar(name="MINIO_SECRET", value=MINIO_SECRET),
+            client.V1EnvVar(name="MINIO_BUCKET", value=MINIO_BUCKET),
+            client.V1EnvVar(name="MINIO_PREFIX", value=MINIO_PREFIX),
+        ],
+        volume_mounts=[
+            client.V1VolumeMount(mount_path="/data", name=volume_name)
+        ]
+    )
+    data_volume = client.V1Volume(
+        name=volume_name,
+        persistent_volume_claim=client.V1PersistentVolumeClaimVolumeSource(
+            claim_name=pvc_name
+        )
+    )
+
+    return init_container, data_volume
+
+#Container Runner
+def pyssion_job_container(volume_name : str = None, image : str = "python", req_file : str = None, resources : client.V1ResourceRequirements = None,entrypoint_file : str = None):
+    if volume_name == None:
+        raise
+
+    #env vars build : TODO LIST (USER CUSTOM docker)
+    env_vars = []
+
     cmd = command_builder(req_file=req_file,entrypoint_file=entrypoint_file)
 
     container = client.V1Container(
@@ -44,15 +70,11 @@ def pyssion_job_container(
         args=[cmd],
         env=env_vars,
         security_context=client.V1SecurityContext(privileged=False,capabilities=client.V1Capabilities(add=["SYS_ADMIN"])),
-        volume_mounts=[client.V1VolumeMount(name=pyssion_configmap_name, mount_path="/scripts"),],
         resources=resources,
         working_dir="/app/code"
     )
 
-    #volume build
-    volume = client.V1Volume(name=pyssion_configmap_name,config_map=client.V1ConfigMapVolumeSource(name=pyssion_configmap_name))
-
-    return container, volume
+    return container
 
 def command_builder(req_file: str = None, entrypoint_file:str = "main.py", minio_mirror: bool = False) -> str:
     steps = ["echo 🚀PYSSION JOB START"]
