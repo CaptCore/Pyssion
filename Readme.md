@@ -76,3 +76,6 @@ if __name__ == "__main__":
 
 - Python 3.11 or latest
 - rancher / minio (or S3)
+
+
+This project is licensed under the MIT License – see the [LICENSE](./LICENSE) file for details.
