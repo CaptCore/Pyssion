@@ -1,0 +1,89 @@
+name: Pylint
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'pyssion_lib/**/*.py'
+
+jobs:
+  detect-changes:
+    runs-on: self-hosted
+    outputs:
+      updated-packages: ${{ steps.detect.outputs.updated }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # full history needed for diff
+
+      - name: Get list of updated packages
+        id: detect
+        run: |
+          echo "🔍 Detecting updated packages..."
+
+          echo 'git diff --name-only origin/${{ github.base_ref }}...HEAD'
+
+          updated=$(git diff --name-only origin/${{ github.base_ref }}...HEAD \
+            | grep '^packages/.*\.py$' \
+            | cut -d/ -f2 \
+            | grep -v '^template$' \
+            | sort -u \
+            | jq -R -s -c 'split("\n") | map(select(length > 0))')
+
+          echo "Updated packages: $updated"
+          echo "updated=$updated" >> "$GITHUB_OUTPUT"
+        shell: bash
+
+  lint:
+    needs: detect-changes
+    runs-on: self-hosted
+    if: needs.detect-changes.outputs.updated-packages != '[]'
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.10', '3.11']
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install helper packages
+        run: |
+          pip install --upgrade pip
+          pip install pylint toml packaging
+
+      - name: Analyzing updated packages with pylint
+        run: |
+          pyver="${{ matrix.python-version }}"
+          updated_packages='${{ needs.detect-changes.outputs.updated-packages }}'
+
+          echo "Python version: $pyver"
+          echo "Updated packages: $updated_packages"
+
+          for pkg_name in $(echo "$updated_packages" | jq -r '.[]'); do
+            pkg="packages/$pkg_name"
+            pyproject="$pkg/pyproject.toml"
+
+            if [ ! -f "$pyproject" ]; then
+              echo "⚠️ $pkg has no pyproject.toml, skipping"
+              continue
+            fi
+
+            req_py=$(python -c "import toml; print(toml.load('$pyproject').get('project', {}).get('requires-python', ''))")
+            if [ -z "$req_py" ]; then
+              echo "⚠️ No requires-python in $pkg, skipping"
+              continue
+            fi
+
+            is_compatible=$(python -c "from packaging.specifiers import SpecifierSet; print(SpecifierSet('$req_py').contains('$pyver'))")
+            if [ "$is_compatible" != "True" ]; then
+              echo "❌ $pkg not compatible with Python $pyver (requires $req_py), skipping"
+              continue
+            fi
+
+            echo "✅ Linting $pkg with Python $pyver"
+            [ -f "$pkg/requirements.txt" ] && pip install -r "$pkg/requirements.txt" --extra-index-url https://pypi.neuroxt.work/simple
+            pylint "$pkg" --fail-under=8.0
+          done
