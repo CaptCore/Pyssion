@@ -1,7 +1,13 @@
 from kubernetes import client
 from pathlib import Path
 
-def create_configmap_from_directory(configmap_name, directory: Path, modified_entrypoint: Path = None, namespace="default"):
+
+def create_configmap_from_directory(
+    configmap_name,
+    directory: Path,
+    modified_entrypoint: Path = None,
+    namespace="default",
+):
     data = {}
 
     for path in directory.rglob("*.py"):
@@ -14,8 +20,7 @@ def create_configmap_from_directory(configmap_name, directory: Path, modified_en
             data[rel_path] = content
 
     configmap = client.V1ConfigMap(
-        metadata=client.V1ObjectMeta(name=configmap_name),
-        data=data
+        metadata=client.V1ObjectMeta(name=configmap_name), data=data
     )
 
     api = client.CoreV1Api()

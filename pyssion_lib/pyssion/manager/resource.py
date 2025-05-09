@@ -6,6 +6,6 @@ class ResourceConfigurator:
         if self._gpus is not None:
             return {
                 "requests": {"nvidia.com/gpu": str(self._gpus)},
-                "limits": {"nvidia.com/gpu": str(self._gpus)}
+                "limits": {"nvidia.com/gpu": str(self._gpus)},
             }
         return None

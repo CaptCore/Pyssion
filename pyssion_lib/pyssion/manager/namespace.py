@@ -14,13 +14,16 @@ from pathlib import Path
 
 # from pyssion.saver.pyssion_ignore import load_ignore_patterns,should_ignore
 
-def generate_random_string():
-    return ''.join(random.choice(string.ascii_lowercase) for _ in range(6))
 
-def generate_pyssion_cache_file(cache_dir:str):
-    cachename = os.path.join(generate_random_string(),".pyssioncache")
-    cache_full_path = os.path.join(cache_dir,cachename)
+def generate_random_string():
+    return "".join(random.choice(string.ascii_lowercase) for _ in range(6))
+
+
+def generate_pyssion_cache_file(cache_dir: str):
+    cachename = os.path.join(generate_random_string(), ".pyssioncache")
+    cache_full_path = os.path.join(cache_dir, cachename)
     return cache_full_path
+
 
 class Pyssion_Namespace:
     def __init__(self):
@@ -28,7 +31,7 @@ class Pyssion_Namespace:
         self.job_name = f"pyssion-job-{self.pyssion_unique_name}"
         self.volume_name = f"pyssion-volume-{self.pyssion_unique_name}"
         self.pvc_name = f"pyssion-pvc-{self.pyssion_unique_name}"
-    
+
     def _generate_unique_job_name(self) -> str:
         self.project_dir = self._path_finder("caller_dir")
         cache_file = Path(self.project_dir) / ".pyssioncache"
@@ -41,16 +44,17 @@ class Pyssion_Namespace:
             cache_file.write_text(json.dumps({"prefix": prefix}), encoding="utf-8")
 
         return prefix
-    
-    def _path_finder(self,locate):
+
+    def _path_finder(self, locate):
         caller_file = inspect.stack()[-1].filename
         caller_path = Path(caller_file).resolve()
         if locate == "caller_path":
             return caller_path
         elif locate == "caller_dir":
             return caller_path.parent.resolve().as_posix()
-    
-#Core Function Archieving
+
+
+# Core Function Archieving
 
 # def _create_configmap_with_zipped_code(self):
 #     caller_dir = Path(self._path_finder("caller_dir"))

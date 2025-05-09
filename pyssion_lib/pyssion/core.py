@@ -10,14 +10,15 @@ from pyssion.saver.minio_client import MinioUploader
 from pyssion.container.builder import PVCBuilder, PVCManager
 from pyssion.container.util import delete_pvc_and_pv, status_print
 
+
 class Pyssion(origin_pyssion):
     def __init__(self):
         env = get_env()
-        #set Pyssion Workload init
+        # set Pyssion Workload init
         self.name = "Pyssion Core"
         self._namespace = Pyssion_Namespace()
 
-        #env build
+        # env build
         self._k8s_config = env.get_k8s_config()
         self._minio_config = env.get_minio_config()
         self._entrypoint_file = env.get_entrypoint()
@@ -27,26 +28,32 @@ class Pyssion(origin_pyssion):
         self._pvc_size = env.get_pvc_storage()
         self._venv_cache = env.use_venv_cache()
         self._cache_drop = env.delete_pvc_after_job()
-        self._minio_config["MINIO_PREFIX"]=self._namespace.pyssion_unique_name
+        self._minio_config["MINIO_PREFIX"] = self._namespace.pyssion_unique_name
 
-        #kubernetes namespace -> get from env
+        # kubernetes namespace -> get from env
         self._kubernetes_namespace = self._k8s_config.get("namespace", "default")
 
-
-        #Kubernetes load
-        self._client_manager = KubernetesClientManager(self._k8s_config,ssl_ignore=self._ssl_ignore)
+        # Kubernetes load
+        self._client_manager = KubernetesClientManager(
+            self._k8s_config, ssl_ignore=self._ssl_ignore
+        )
         self._client_manager.configure()
-        self._batch_v1, self._core_v1, self._storage_v1 = self._client_manager.get_clients()
+        self._batch_v1, self._core_v1, self._storage_v1 = (
+            self._client_manager.get_clients()
+        )
 
-        #Kubernetes Manage
+        # Kubernetes Manage
         self._job_cleaner = KubernetesJobCleaner(self._batch_v1)
-        self._log_streamer = KubernetesLogStreamer(self._core_v1, self._kubernetes_namespace)
-
+        self._log_streamer = KubernetesLogStreamer(
+            self._core_v1, self._kubernetes_namespace
+        )
 
     @error_wrapper
     def run(self):
         print("✅ pyssion Fission!")
-        self._job_cleaner.delete_if_exists(self._kubernetes_namespace, self._namespace.job_name)
+        self._job_cleaner.delete_if_exists(
+            self._kubernetes_namespace, self._namespace.job_name
+        )
 
         print("Upload Local File to MinIO!")
         uploader = MinioUploader(self._minio_config)
@@ -56,7 +63,9 @@ class Pyssion(origin_pyssion):
         print(f"👌Pyssion job name : {self._namespace.job_name}")
         print("✅ Create PVC")
 
-        pvc = PVCBuilder(pvc_name=self._namespace.pvc_name, storage=self._pvc_size).build()
+        pvc = PVCBuilder(
+            pvc_name=self._namespace.pvc_name, storage=self._pvc_size
+        ).build()
         pvc_manager = PVCManager(self._core_v1, self._kubernetes_namespace)
         pvc_manager.ensure_or_resize(pvc)
 
@@ -69,19 +78,24 @@ class Pyssion(origin_pyssion):
             resource=self._resource_config,
             req_file=self._req_file,
             entrypoint_file=self._entrypoint_file,
-            venv_cache=self._venv_cache
+            venv_cache=self._venv_cache,
         ).build_job_spec()
 
         self._batch_v1.create_namespaced_job(
-            namespace=self._kubernetes_namespace,
-            body=job_spec
+            namespace=self._kubernetes_namespace, body=job_spec
         )
         self._log_streamer.stream_logs(self._namespace.job_name)
 
-        status_print(self._batch_v1,self._kubernetes_namespace,self._namespace.job_name)
+        status_print(
+            self._batch_v1, self._kubernetes_namespace, self._namespace.job_name
+        )
 
         if self._cache_drop == True:
-            self._job_cleaner.delete_if_exists(self._kubernetes_namespace, self._namespace.job_name)
-            delete_pvc_and_pv(self._core_v1, self._kubernetes_namespace, self._namespace.pvc_name)
+            self._job_cleaner.delete_if_exists(
+                self._kubernetes_namespace, self._namespace.job_name
+            )
+            delete_pvc_and_pv(
+                self._core_v1, self._kubernetes_namespace, self._namespace.pvc_name
+            )
         else:
             print("✅ pyssion job Finished!")

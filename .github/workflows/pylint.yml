@@ -59,8 +59,8 @@ jobs:
           pyver="${{ matrix.python-version }}"
           updated_packages='${{ needs.detect-changes.outputs.updated-packages }}'
 
-          echo "Python version: $pyver"
-          echo "Updated packages: $updated_packages"
+          echo "❕Python version: $pyver"
+          echo "❕Updated packages: $updated_packages"
 
           for pkg_name in $(echo "$updated_packages" | jq -r '.[]'); do
             pkg="packages/$pkg_name"

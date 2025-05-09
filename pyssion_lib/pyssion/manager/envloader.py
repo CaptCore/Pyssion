@@ -7,15 +7,18 @@ from pyssion.manager.resource import ResourceConfigurator
 
 _cached_env = None
 
+
 def get_env():
     global _cached_env
     if _cached_env is None:
         _cached_env = PyssionEnvLoader()
     return _cached_env
 
+
 def reset_env():
     global _cached_env
     _cached_env = None
+
 
 class PyssionEnvLoader:
     def __init__(self):
@@ -41,7 +44,7 @@ class PyssionEnvLoader:
                 if not line or line.startswith("#"):
                     continue
                 if line.startswith("export "):
-                    line = line[len("export "):]
+                    line = line[len("export ") :]
                 if "=" in line:
                     key, value = line.split("=", 1)
                     self.config[key.strip()] = shlex.split(value.strip())[0]
@@ -57,7 +60,7 @@ class PyssionEnvLoader:
     def get_k8s_config(self):
         return {
             "config_file": self.config.get("K8S_CONFIG"),
-            "namespace": self.config.get("K8S_NAMESPACE", "default")
+            "namespace": self.config.get("K8S_NAMESPACE", "default"),
         }
 
     def get_entrypoint(self):
@@ -68,16 +71,20 @@ class PyssionEnvLoader:
 
     def get_gpu_resource(self):
         return ResourceConfigurator(self.config.get("GPU")).get_config()
-    
+
     def get_ssl_ignore(self) -> bool:
         val = self.config.get("SSL_IGNORE", "true").lower()
         return val in ["1", "true", "yes", "on"]
-    
+
     def get_pvc_storage(self, default: str = "128Gi") -> str:
         return self.config.get("PVC_STORAGE", default)
-    
+
     def use_venv_cache(self) -> bool:
         return self.config.get("USE_VENV_CACHE", "0").strip() in ["1", "true", "yes"]
-    
+
     def delete_pvc_after_job(self) -> bool:
-        return self.config.get("DELETE_PVC_AFTER_JOB", "0").strip() in ["1", "true", "yes"]
+        return self.config.get("DELETE_PVC_AFTER_JOB", "0").strip() in [
+            "1",
+            "true",
+            "yes",
+        ]

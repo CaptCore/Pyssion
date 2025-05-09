@@ -12,12 +12,8 @@ prefix = os.getenv("PYSSION_MINIO_PREFIX", "")
 download_root = Path("/app/code")
 
 # MinIO Client Init
-client = Minio(
-    endpoint,
-    access_key=access_key,
-    secret_key=secret_key,
-    secure=False
-)
+client = Minio(endpoint, access_key=access_key, secret_key=secret_key, secure=False)
+
 
 def file_md5(path: Path) -> str:
     h = hashlib.md5()
@@ -25,6 +21,7 @@ def file_md5(path: Path) -> str:
         for chunk in iter(lambda: f.read(8192), b""):
             h.update(chunk)
     return h.hexdigest()
+
 
 # Travel list
 for obj in client.list_objects(bucket, prefix=prefix, recursive=True):

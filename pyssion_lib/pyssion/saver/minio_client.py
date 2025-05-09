@@ -3,13 +3,14 @@ import hashlib
 from pathlib import Path
 from minio import Minio
 
+
 class MinioUploader:
     def __init__(self, minio_config: dict):
         self.client = Minio(
             minio_config["MINIO_ENDPOINT"],
             access_key=minio_config["MINIO_ACCESS"],
             secret_key=minio_config["MINIO_SECRET"],
-            secure=False
+            secure=False,
         )
         self.bucket = minio_config["MINIO_BUCKET"]
         self.prefix = minio_config["MINIO_PREFIX"]
@@ -38,7 +39,8 @@ class MinioUploader:
         if ignore_file.exists():
             with ignore_file.open("r", encoding="utf-8") as f:
                 self.ignore_patterns = [
-                    line.strip() for line in f
+                    line.strip()
+                    for line in f
                     if line.strip() and not line.strip().startswith("#")
                 ]
 

@@ -2,6 +2,7 @@
 from kubernetes import client, config
 from kubernetes.client import Configuration
 
+
 class KubernetesClientManager:
     def __init__(self, k8s_config: dict = None, ssl_ignore: bool = True):
         self.k8s_config = k8s_config
@@ -26,8 +27,10 @@ class KubernetesClientManager:
 
     def get_clients(self):
         if not self._configured:
-            raise RuntimeError("Kubernetes client is not configured. Call `configure()` first.")
-        
+            raise RuntimeError(
+                "Kubernetes client is not configured. Call `configure()` first."
+            )
+
         return (
             client.BatchV1Api(),
             client.CoreV1Api(),
