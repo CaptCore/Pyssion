@@ -1,7 +1,7 @@
 from kubernetes import client
-from pyssion.container.builder import main_container_build, init_container_build
-from pyssion.manager.namespace import Pyssion_Namespace
-from pyssion.handler.handler_main import origin_pyssion
+from .builder import main_container_build, init_container_build
+from ..manager.namespace import Pyssion_Namespace
+from ..handler.handler_main import origin_pyssion
 
 
 class KubernetesJobCreator(origin_pyssion):

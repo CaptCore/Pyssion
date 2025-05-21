@@ -1,12 +1,10 @@
 # pyssion/manager/envloader.py
 from pathlib import Path
-import os
 import shlex
 import inspect
-from pyssion.manager.resource import ResourceConfigurator
+from .resource import ResourceConfigurator
 
 _cached_env = None
-
 
 def get_env():
     global _cached_env

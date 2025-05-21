@@ -1,8 +1,8 @@
 # pyssion/cli.py
 import click
 import os
-from pyssion.core import Pyssion
-from pyssion.manager.envloader import get_env
+from .core import Pyssion
+from .manager.envloader import get_env
 
 
 @click.group()

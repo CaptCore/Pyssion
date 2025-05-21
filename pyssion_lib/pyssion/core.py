@@ -1,14 +1,14 @@
-from pyssion.manager.namespace import Pyssion_Namespace
-from pyssion.handler.handler_main import origin_pyssion
-from pyssion.container.creator import KubernetesJobCreator
-from pyssion.handler.error_handler import error_wrapper
-from pyssion.manager.client import KubernetesClientManager
-from pyssion.manager.cleaner import KubernetesJobCleaner
-from pyssion.manager.logger import KubernetesLogStreamer
-from pyssion.manager.envloader import get_env
-from pyssion.saver.minio_client import MinioUploader
-from pyssion.container.builder import PVCBuilder, PVCManager
-from pyssion.container.util import delete_pvc_and_pv, status_print
+from .manager.namespace import Pyssion_Namespace
+from .handler.handler_main import origin_pyssion
+from .container.creator import KubernetesJobCreator
+from .handler.error_handler import error_wrapper
+from .manager.client import KubernetesClientManager
+from .manager.cleaner import KubernetesJobCleaner
+from .manager.logger import KubernetesLogStreamer
+from .manager.envloader import get_env
+from .saver.minio_client import MinioUploader
+from .container.builder import PVCBuilder, PVCManager
+from .container.util import delete_pvc_and_pv, status_print
 
 
 class Pyssion(origin_pyssion):
