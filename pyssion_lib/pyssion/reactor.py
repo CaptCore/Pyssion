@@ -3,7 +3,7 @@ from .handler.error_handler import error_wrapper
 from .reactor_extension.service import make_service
 
 
-class reactor(Pyssion):
+class Reactor(Pyssion):
     def __init__(self):
         super().__init__()
 

@@ -1,5 +1,5 @@
 from .manager.namespace import Pyssion_Namespace
-from .handler.handler_main import origin_pyssion
+from .handler.handler_main import OriginPyssion
 from .container.creator import KubernetesJobCreator
 from .handler.error_handler import error_wrapper
 from .manager.client import KubernetesClientManager
@@ -11,7 +11,7 @@ from .container.builder import PVCBuilder, PVCManager
 from .container.util import delete_pvc_and_pv, status_print
 
 
-class Pyssion(origin_pyssion):
+class Pyssion(OriginPyssion):
     def __init__(self):
         env = get_env()
         # set Pyssion Workload init
@@ -90,7 +90,7 @@ class Pyssion(origin_pyssion):
             self._batch_v1, self._kubernetes_namespace, self._namespace.job_name
         )
 
-        if self._cache_drop == True:
+        if self._cache_drop is True:
             self._job_cleaner.delete_if_exists(
                 self._kubernetes_namespace, self._namespace.job_name
             )

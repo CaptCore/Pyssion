@@ -2,7 +2,7 @@ import sys
 import traceback
 
 
-class origin_pyssion:
+class OriginPyssion:
     def __init__(self):
         self.name = "Pyssion"
 

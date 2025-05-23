@@ -1,10 +1,10 @@
 from kubernetes import client
 from .builder import main_container_build, init_container_build
 from ..manager.namespace import Pyssion_Namespace
-from ..handler.handler_main import origin_pyssion
+from ..handler.handler_main import OriginPyssion
 
 
-class KubernetesJobCreator(origin_pyssion):
+class KubernetesJobCreator(OriginPyssion):
     def __init__(
         self,
         image: str,
@@ -42,7 +42,7 @@ class KubernetesJobCreator(origin_pyssion):
         volume_list = []
 
         print(
-            f"❕{self._minio_env["MINIO_BUCKET"]}/{self._minio_env["MINIO_PREFIX"]} will be copy on your container"
+            f"❕{self._minio_env['MINIO_BUCKET']}/{self._minio_env['MINIO_PREFIX']} will be copy on your container"
         )
         container, volume = init_container_build(
             self._minio_env, self._volume_name, self._pvc_name
