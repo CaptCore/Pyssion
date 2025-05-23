@@ -1,10 +1,12 @@
 # pyssion/manager/envloader.py
 from pathlib import Path
+import __main__
 import shlex
 import inspect
 from .resource import ResourceConfigurator
 
 _cached_env = None
+
 
 def get_env():
     global _cached_env
@@ -56,8 +58,14 @@ class PyssionEnvLoader:
         }
 
     def get_k8s_config(self):
+        main_file = getattr(__main__, "__file__", None)
+        if main_file:
+            base_dir = Path(main_file).resolve().parent
+        else:
+            base_dir = Path.cwd()
+        config_file = str((base_dir / self.config.get("K8S_CONFIG")).resolve())
         return {
-            "config_file": self.config.get("K8S_CONFIG"),
+            "config_file": config_file,
             "namespace": self.config.get("K8S_NAMESPACE", "default"),
         }
 
